@@ -29,6 +29,8 @@ export default function AdminPage() {
   const [newComment, setNewComment] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('adminToken');
