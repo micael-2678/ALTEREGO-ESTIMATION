@@ -203,7 +203,11 @@ export default function App() {
       <header className="bg-white border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">AlterEgo</h1>
+            <img 
+              src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
+              alt="AlterEgo" 
+              className="h-12 w-auto"
+            />
             <div className="text-sm text-gray-600">
               Accueil &gt; Estimation immobilière
             </div>
