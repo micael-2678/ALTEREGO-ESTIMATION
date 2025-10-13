@@ -35,9 +35,13 @@ export default function App() {
     
     // Étape 4: Avantages supplémentaires
     hasBasement: false,
+    basementSurface: '',
     hasBalconyTerrace: false,
+    balconyTerraceSurface: '',
     hasOutdoorParking: false,
+    outdoorParkingCount: '',
     hasIndoorParking: false,
+    indoorParkingCount: '',
     hasPool: false,
     view: '',
     
