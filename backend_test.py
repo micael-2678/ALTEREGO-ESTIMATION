@@ -32,6 +32,7 @@ class APITester:
         self.session = requests.Session()
         self.jwt_token = None
         self.results = []
+        self.test_lead_id = None
         
     def log_result(self, test_name, success, message, response_data=None):
         """Log test result"""
