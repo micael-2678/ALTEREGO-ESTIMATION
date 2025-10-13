@@ -541,3 +541,68 @@ export async function POST(request) {
     );
   }
 }
+
+
+export async function DELETE(request) {
+  const { pathname } = new URL(request.url);
+
+  try {
+    // Delete lead (admin)
+    if (pathname === '/api/admin/leads/delete') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const { searchParams } = new URL(request.url);
+      const leadId = searchParams.get('leadId');
+      
+      if (!leadId) {
+        return NextResponse.json(
+          { error: 'Lead ID is required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('leads');
+      
+      const result = await collection.deleteOne({ id: leadId });
+      
+      if (result.deletedCount === 0) {
+        return NextResponse.json(
+          { error: 'Lead not found' },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { success: true, deleted: true },
+        { headers: corsHeaders }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Not found' },
+      { status: 404, headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', message: error.message },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
