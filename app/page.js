@@ -919,70 +919,47 @@ export default function App() {
               </Card>
             )}
 
-            {/* CTA Lead */}
-            <Card className="p-8 bg-gradient-to-r from-gray-900 to-gray-800 text-white text-center">
-              <h3 className="text-3xl font-bold mb-4">Recevoir le rapport complet + être rappelé</h3>
-              <p className="mb-6 text-gray-300">Un expert immobilier vous contactera pour affiner votre estimation</p>
-              
-              <div className="max-w-md mx-auto space-y-4">
-                <Input
-                  placeholder="Nom complet"
-                  value={leadForm.name}
-                  onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                  className="bg-white text-black"
-                />
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={leadForm.email}
-                  onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
-                  className="bg-white text-black"
-                />
-                <Input
-                  placeholder="Téléphone"
-                  value={leadForm.phone}
-                  onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
-                  className="bg-white text-black"
-                />
-                
-                <div className="flex items-start gap-2 text-left">
-                  <input
-                    type="checkbox"
-                    checked={leadForm.consent}
-                    onChange={(e) => setLeadForm({ ...leadForm, consent: e.target.checked })}
-                    className="mt-1"
-                  />
-                  <label className="text-sm text-gray-300">
-                    J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon rapport et bénéficier d'un accompagnement personnalisé.
-                  </label>
-                </div>
-                
-                <Button
-                  onClick={handleSubmitLead}
-                  disabled={loading}
-                  className="w-full bg-white text-black hover:bg-gray-200"
-                >
-                  {loading ? 'Envoi...' : 'Recevoir le rapport + RDV'}
-                </Button>
-              </div>
-            </Card>
+            {/* Bouton nouvelle estimation */}
+            <div className="text-center">
+              <Button
+                onClick={() => {
+                  setStep(1);
+                  setFormData({
+                    address: '',
+                    lat: null,
+                    lng: null,
+                    type: '',
+                    surface: '',
+                    totalSurface: '',
+                    rooms: '',
+                    bathrooms: '',
+                    floors: '',
+                    floor: '',
+                    hasBasement: false,
+                    basementSurface: '',
+                    hasBalconyTerrace: false,
+                    balconyTerraceSurface: '',
+                    hasOutdoorParking: false,
+                    outdoorParkingCount: '',
+                    hasIndoorParking: false,
+                    indoorParkingCount: '',
+                    hasPool: false,
+                    view: '',
+                    yearBuilt: '',
+                    dpe: '',
+                    standing: 3
+                  });
+                  setResults(null);
+                  setLeadForm({ name: '', email: '', phone: '', consent: false });
+                }}
+                variant="outline"
+                className="px-8 py-3"
+              >
+                Faire une nouvelle estimation
+              </Button>
+            </div>
           </div>
         )}
-
-        {/* Étape 7: Confirmation */}
-        {step === 7 && (
-          <div className="max-w-2xl mx-auto text-center">
-            <div className="bg-white p-12 rounded-lg shadow-lg">
-              <div className="w-20 h-20 bg-green-500 rounded-full mx-auto mb-6 flex items-center justify-center">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h2 className="text-4xl font-bold mb-4">Merci !</h2>
-              <p className="text-xl text-gray-600 mb-8">
-                Votre demande a été envoyée avec succès. Un expert immobilier vous contactera dans les plus brefs délais.
-              </p>
-              <Button
                 onClick={() => {
                   setStep(1);
                   setFormData({
