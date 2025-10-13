@@ -162,6 +162,55 @@ export async function GET(request) {
       return NextResponse.json({ leads }, { headers: corsHeaders });
     }
 
+    // Get DVF ingestion status (admin)
+    if (pathname === '/api/admin/dvf/status') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('dvf_sales');
+      
+      // Get statistics per department
+      const pipeline = [
+        {
+          $group: {
+            _id: '$code_departement',
+            count: { $sum: 1 },
+            appartements: {
+              $sum: { $cond: [{ $eq: ['$type_local', 'appartement'] }, 1, 0] }
+            },
+            maisons: {
+              $sum: { $cond: [{ $eq: ['$type_local', 'maison'] }, 1, 0] }
+            },
+            lastImport: { $max: '$imported_at' }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ];
+      
+      const stats = await collection.aggregate(pipeline).toArray();
+      const total = await collection.countDocuments({});
+      
+      return NextResponse.json({ 
+        total, 
+        byDepartment: stats 
+      }, { headers: corsHeaders });
+    }
+
     return NextResponse.json(
       { error: 'Not found' },
       { status: 404, headers: corsHeaders }
