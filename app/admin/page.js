@@ -180,12 +180,15 @@ export default function AdminPage() {
   };
 
   const deleteLead = async (leadId) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce lead ? Cette action est irréversible.')) {
-      return;
-    }
+    setLeadToDelete(leadId);
+    setShowDeleteConfirm(true);
+  };
+  
+  const confirmDelete = async () => {
+    if (!leadToDelete) return;
     
     try {
-      const res = await fetch(`/api/admin/leads/delete?leadId=${leadId}`, {
+      const res = await fetch(`/api/admin/leads/delete?leadId=${leadToDelete}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -193,11 +196,13 @@ export default function AdminPage() {
       });
       
       if (res.ok) {
-        setLeads(prevLeads => prevLeads.filter(lead => lead.id !== leadId));
+        setLeads(prevLeads => prevLeads.filter(lead => lead.id !== leadToDelete));
         setShowDetailModal(false);
         setShowEditModal(false);
+        setShowDeleteConfirm(false);
         setSelectedLead(null);
         setEditedLead(null);
+        setLeadToDelete(null);
       } else {
         alert('Erreur lors de la suppression du lead');
       }
