@@ -790,11 +790,20 @@ class APITester:
         self.test_add_lead_comment()
         self.test_add_multiple_comments()
         
+        # NEW: Lead deletion tests
+        print("\n🗑️ Testing Lead Deletion Endpoint...")
+        self.test_create_test_lead_for_deletion()
+        self.test_delete_lead_success()
+        self.test_verify_lead_deletion()
+        
         # Authentication and error handling for new endpoints
         self.test_update_lead_unauthorized()
         self.test_comment_lead_unauthorized()
+        self.test_delete_lead_unauthorized()
         self.test_update_lead_invalid_id()
         self.test_comment_lead_missing_params()
+        self.test_delete_lead_invalid_id()
+        self.test_delete_lead_missing_id()
         
         # Error handling tests
         self.test_invalid_endpoint()
