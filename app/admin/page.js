@@ -79,18 +79,52 @@ export default function AdminPage() {
   };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Nom', 'Email', 'Téléphone', 'Adresse', 'Type', 'Surface', 'Estimation DVF', 'Estimation Marché'];
+    const headers = [
+      'Date',
+      'Heure',
+      'Nom',
+      'Email',
+      'Téléphone',
+      'Adresse',
+      'Type',
+      'Surface (m²)',
+      'Prix Estimé (€)',
+      'Prix Conseillé (€)',
+      'Confiance (%)',
+      'Delta vs DVF (%)',
+      'Comparables',
+      'Statut',
+      // Détails supplémentaires
+      'Pièces',
+      'Salles de bains',
+      'Étage',
+      'DPE',
+      'Standing'
+    ];
+    
     const rows = filteredLeads.map(lead => [
       new Date(lead.createdAt).toLocaleDateString('fr-FR'),
+      new Date(lead.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       lead.name,
       lead.email,
       lead.phone || '',
       lead.property?.address || '',
       lead.property?.type || '',
       lead.property?.surface || '',
-      lead.estimation?.estimatedValue?.toLocaleString() || '',
-      lead.estimation?.market?.stats?.medianPricePerM2 ? 
-        Math.round(lead.estimation.market.stats.medianPricePerM2 * parseFloat(lead.property?.surface || 0)).toLocaleString() : ''
+      lead.estimation?.finalPrice?.low || lead.estimation?.estimatedValue || '',
+      lead.estimation?.finalPrice?.mid || '',
+      lead.estimation?.finalPrice?.confidence || '',
+      lead.estimation?.adjustments?.deltaVsDvfPercent || '',
+      lead.estimation?.dvf?.count || '',
+      lead.status === 'estimation_complete' ? 'Complète' :
+      lead.status === 'pending_estimation' ? 'En cours' : 
+      lead.status || 'Nouveau',
+      // Détails
+      lead.property?.rooms || '',
+      lead.property?.bathrooms || '',
+      lead.property?.floor || '',
+      lead.property?.dpe || '',
+      lead.property?.standing || ''
     ]);
     
     const csvContent = [
@@ -98,10 +132,10 @@ export default function AdminPage() {
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `leads_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `leads_alterego_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
