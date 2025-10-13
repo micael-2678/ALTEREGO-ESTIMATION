@@ -564,9 +564,19 @@ export default function AdminPage() {
               <DialogHeader>
                 <DialogTitle className="text-2xl flex items-center justify-between">
                   <span>{selectedLead.name}</span>
-                  <Badge className={getStatusColor(selectedLead.status)}>
-                    {getStatusLabel(selectedLead.status)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(selectedLead.status)}>
+                      {getStatusLabel(selectedLead.status)}
+                    </Badge>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteLead(selectedLead.id)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Supprimer
+                    </Button>
+                  </div>
                 </DialogTitle>
               </DialogHeader>
 
