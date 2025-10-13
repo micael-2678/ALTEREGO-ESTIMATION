@@ -1,9 +1,10 @@
 // Script CLI pour ingérer les données DVF
-import { config } from 'dotenv';
-config(); // Load environment variables
-
 import { ingestDVFDepartment, ingestMultipleDepartments } from '../lib/dvf-ingestion.js';
 import { connectToDatabase } from '../lib/mongodb.js';
+
+// Load env vars manually
+process.env.MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
+process.env.DB_NAME = process.env.DB_NAME || 'alterego_db';
 
 const args = process.argv.slice(2);
 
