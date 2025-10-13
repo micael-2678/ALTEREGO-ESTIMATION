@@ -401,58 +401,147 @@ export default function App() {
               <p className="text-sm text-gray-600 mb-6">Ces informations sont facultatives mais permettent une estimation plus précise.</p>
               
               <div className="space-y-6">
-                {/* Checkboxes */}
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.hasBasement}
-                      onChange={(e) => setFormData({ ...formData, hasBasement: e.target.checked })}
-                      className="w-5 h-5"
-                    />
-                    <span>Sous-sol</span>
-                  </label>
-                  
-                  <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.hasBalconyTerrace}
-                      onChange={(e) => setFormData({ ...formData, hasBalconyTerrace: e.target.checked })}
-                      className="w-5 h-5"
-                    />
-                    <span>Balcon ou terrasse</span>
-                  </label>
-                  
-                  <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.hasOutdoorParking}
-                      onChange={(e) => setFormData({ ...formData, hasOutdoorParking: e.target.checked })}
-                      className="w-5 h-5"
-                    />
-                    <span>Place de parking extérieur</span>
-                  </label>
-                  
-                  <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.hasIndoorParking}
-                      onChange={(e) => setFormData({ ...formData, hasIndoorParking: e.target.checked })}
-                      className="w-5 h-5"
-                    />
-                    <span>Place de parking intérieur</span>
-                  </label>
-                  
-                  {formData.type === 'maison' && (
-                    <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
+                {/* Checkboxes avec inputs conditionnels */}
+                <div className="space-y-4">
+                  {/* Sous-sol */}
+                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
+                    <label className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={formData.hasPool}
-                        onChange={(e) => setFormData({ ...formData, hasPool: e.target.checked })}
-                        className="w-5 h-5"
+                        checked={formData.hasBasement}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          hasBasement: e.target.checked,
+                          basementSurface: e.target.checked ? formData.basementSurface : ''
+                        })}
+                        className="w-5 h-5 mt-1"
                       />
-                      <span>Piscine</span>
+                      <div className="flex-1">
+                        <span className="font-medium">Sous-sol</span>
+                        {formData.hasBasement && (
+                          <div className="mt-3 flex items-center gap-3">
+                            <Input
+                              type="number"
+                              placeholder="Surface"
+                              value={formData.basementSurface}
+                              onChange={(e) => setFormData({ ...formData, basementSurface: e.target.value })}
+                              className="w-32"
+                            />
+                            <span className="text-gray-600">m²</span>
+                          </div>
+                        )}
+                      </div>
                     </label>
+                  </div>
+                  
+                  {/* Balcon ou terrasse */}
+                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.hasBalconyTerrace}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          hasBalconyTerrace: e.target.checked,
+                          balconyTerraceSurface: e.target.checked ? formData.balconyTerraceSurface : ''
+                        })}
+                        className="w-5 h-5 mt-1"
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium">Balcon ou terrasse</span>
+                        {formData.hasBalconyTerrace && (
+                          <div className="mt-3 flex items-center gap-3">
+                            <Input
+                              type="number"
+                              placeholder="Surface"
+                              value={formData.balconyTerraceSurface}
+                              onChange={(e) => setFormData({ ...formData, balconyTerraceSurface: e.target.value })}
+                              className="w-32"
+                            />
+                            <span className="text-gray-600">m²</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                  
+                  {/* Parking extérieur */}
+                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.hasOutdoorParking}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          hasOutdoorParking: e.target.checked,
+                          outdoorParkingCount: e.target.checked ? formData.outdoorParkingCount : ''
+                        })}
+                        className="w-5 h-5 mt-1"
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium">Place de parking extérieur</span>
+                        {formData.hasOutdoorParking && (
+                          <div className="mt-3 flex items-center gap-3">
+                            <Input
+                              type="number"
+                              placeholder="Nombre"
+                              value={formData.outdoorParkingCount}
+                              onChange={(e) => setFormData({ ...formData, outdoorParkingCount: e.target.value })}
+                              className="w-32"
+                              min="1"
+                            />
+                            <span className="text-gray-600">place(s)</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                  
+                  {/* Parking intérieur */}
+                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.hasIndoorParking}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          hasIndoorParking: e.target.checked,
+                          indoorParkingCount: e.target.checked ? formData.indoorParkingCount : ''
+                        })}
+                        className="w-5 h-5 mt-1"
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium">Place de parking intérieur</span>
+                        {formData.hasIndoorParking && (
+                          <div className="mt-3 flex items-center gap-3">
+                            <Input
+                              type="number"
+                              placeholder="Nombre"
+                              value={formData.indoorParkingCount}
+                              onChange={(e) => setFormData({ ...formData, indoorParkingCount: e.target.value })}
+                              className="w-32"
+                              min="1"
+                            />
+                            <span className="text-gray-600">place(s)</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                  
+                  {/* Piscine (maison uniquement) */}
+                  {formData.type === 'maison' && (
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.hasPool}
+                          onChange={(e) => setFormData({ ...formData, hasPool: e.target.checked })}
+                          className="w-5 h-5"
+                        />
+                        <span className="font-medium">Piscine</span>
+                      </label>
+                    </div>
                   )}
                 </div>
                 
