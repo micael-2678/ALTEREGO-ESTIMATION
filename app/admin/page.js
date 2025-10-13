@@ -792,6 +792,38 @@ export default function AdminPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700">
+              Êtes-vous sûr de vouloir supprimer ce lead ? Cette action est irréversible.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                setLeadToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmDelete}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Supprimer définitivement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
