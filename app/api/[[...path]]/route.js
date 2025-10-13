@@ -1,104 +1,277 @@
-import { MongoClient } from 'mongodb'
-import { v4 as uuidv4 } from 'uuid'
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
+import { connectToDatabase, getCollection } from '../../../lib/mongodb';
+import { getDVFComparables } from '../../../lib/dvf';
+import { scrapeSeLoger, calculateMarketStats } from '../../../lib/scraper';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
-// MongoDB connection
-let client
-let db
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
-  }
-  return db
-}
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
-// Helper function to handle CORS
-function handleCORS(response) {
-  response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  response.headers.set('Access-Control-Allow-Credentials', 'true')
-  return response
-}
-
-// OPTIONS handler for CORS
 export async function OPTIONS() {
-  return handleCORS(new NextResponse(null, { status: 200 }))
+  return NextResponse.json({}, { headers: corsHeaders });
 }
 
-// Route handler function
-async function handleRoute(request, { params }) {
-  const { path = [] } = params
-  const route = `/${path.join('/')}`
-  const method = request.method
+export async function GET(request) {
+  const { pathname, searchParams } = new URL(request.url);
 
   try {
-    const db = await connectToMongo()
-
-    // Root endpoint - GET /api/root (since /api/ is not accessible with catch-all)
-    if (route === '/root' && method === 'GET') {
-      return handleCORS(NextResponse.json({ message: "Hello World" }))
-    }
-    // Root endpoint - GET /api/root (since /api/ is not accessible with catch-all)
-    if (route === '/' && method === 'GET') {
-      return handleCORS(NextResponse.json({ message: "Hello World" }))
+    // Root endpoint
+    if (pathname === '/api/' || pathname === '/api') {
+      return NextResponse.json(
+        { message: 'AlterEgo API is running', version: '1.0.0' },
+        { headers: corsHeaders }
+      );
     }
 
-    // Status endpoints - POST /api/status
-    if (route === '/status' && method === 'POST') {
-      const body = await request.json()
+    // Geocode address using French government BAN API
+    if (pathname === '/api/geo/resolve') {
+      const address = searchParams.get('address');
       
-      if (!body.client_name) {
-        return handleCORS(NextResponse.json(
-          { error: "client_name is required" }, 
-          { status: 400 }
-        ))
+      if (!address) {
+        return NextResponse.json(
+          { error: 'Address is required' },
+          { status: 400, headers: corsHeaders }
+        );
       }
-
-      const statusObj = {
-        id: uuidv4(),
-        client_name: body.client_name,
-        timestamp: new Date()
-      }
-
-      await db.collection('status_checks').insertOne(statusObj)
-      return handleCORS(NextResponse.json(statusObj))
-    }
-
-    // Status endpoints - GET /api/status
-    if (route === '/status' && method === 'GET') {
-      const statusChecks = await db.collection('status_checks')
-        .find({})
-        .limit(1000)
-        .toArray()
-
-      // Remove MongoDB's _id field from response
-      const cleanedStatusChecks = statusChecks.map(({ _id, ...rest }) => rest)
       
-      return handleCORS(NextResponse.json(cleanedStatusChecks))
+      const response = await fetch(
+        `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(address)}&limit=5`
+      );
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        const suggestions = data.features.map(f => ({
+          address: f.properties.label,
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+          city: f.properties.city,
+          postalCode: f.properties.postcode
+        }));
+        
+        return NextResponse.json(
+          { suggestions },
+          { headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { error: 'Address not found' },
+        { status: 404, headers: corsHeaders }
+      );
     }
 
-    // Route not found
-    return handleCORS(NextResponse.json(
-      { error: `Route ${route} not found` }, 
-      { status: 404 }
-    ))
+    // Get DVF comparables
+    if (pathname === '/api/dvf/comparables') {
+      const lat = parseFloat(searchParams.get('lat'));
+      const lng = parseFloat(searchParams.get('lng'));
+      const type = searchParams.get('type');
+      const surface = parseFloat(searchParams.get('surface'));
+      const radiusMeters = parseInt(searchParams.get('radiusMeters')) || 1000;
+      const months = parseInt(searchParams.get('months')) || 24;
+      
+      if (!lat || !lng || !type || !surface) {
+        return NextResponse.json(
+          { error: 'Missing required parameters' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      const result = await getDVFComparables({
+        lat,
+        lng,
+        type,
+        surface,
+        radiusMeters,
+        months
+      });
+      
+      return NextResponse.json(result, { headers: corsHeaders });
+    }
 
+    // Get active market listings
+    if (pathname === '/api/market/listings') {
+      const address = searchParams.get('address');
+      const lat = parseFloat(searchParams.get('lat'));
+      const lng = parseFloat(searchParams.get('lng'));
+      const type = searchParams.get('type');
+      const surface = parseFloat(searchParams.get('surface'));
+      
+      if (!address || !lat || !lng || !type || !surface) {
+        return NextResponse.json(
+          { error: 'Missing required parameters' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
+        const stats = calculateMarketStats(listings);
+        
+        return NextResponse.json(
+          { listings: listings.slice(0, 20), stats },
+          { headers: corsHeaders }
+        );
+      } catch (error) {
+        console.error('Market scraping error:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch market listings', listings: [], stats: null },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Get all leads (admin)
+    if (pathname === '/api/leads') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('leads');
+      const leads = await collection.find({}).sort({ createdAt: -1 }).toArray();
+      
+      return NextResponse.json({ leads }, { headers: corsHeaders });
+    }
+
+    return NextResponse.json(
+      { error: 'Not found' },
+      { status: 404, headers: corsHeaders }
+    );
   } catch (error) {
-    console.error('API Error:', error)
-    return handleCORS(NextResponse.json(
-      { error: "Internal server error" }, 
-      { status: 500 }
-    ))
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', message: error.message },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
-// Export all HTTP methods
-export const GET = handleRoute
-export const POST = handleRoute
-export const PUT = handleRoute
-export const DELETE = handleRoute
-export const PATCH = handleRoute
+export async function POST(request) {
+  const { pathname } = new URL(request.url);
+
+  try {
+    // Admin login
+    if (pathname === '/api/auth/login') {
+      const { username, password } = await request.json();
+      
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '24h' });
+        
+        return NextResponse.json(
+          { token, user: { username } },
+          { headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    // Submit lead
+    if (pathname === '/api/leads') {
+      const leadData = await request.json();
+      
+      const lead = {
+        id: uuidv4(),
+        ...leadData,
+        createdAt: new Date().toISOString()
+      };
+      
+      const collection = await getCollection('leads');
+      await collection.insertOne(lead);
+      
+      return NextResponse.json(
+        { success: true, leadId: lead.id },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Full estimation (DVF + Market)
+    if (pathname === '/api/estimate') {
+      const { address, lat, lng, type, surface, characteristics } = await request.json();
+      
+      if (!address || !lat || !lng || !type || !surface) {
+        return NextResponse.json(
+          { error: 'Missing required parameters' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Get DVF comparables
+      const dvfResult = await getDVFComparables({
+        lat,
+        lng,
+        type,
+        surface,
+        radiusMeters: 1000,
+        months: 24
+      });
+      
+      // Get market listings
+      let marketResult = { listings: [], stats: null };
+      try {
+        const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
+        marketResult = {
+          listings: listings.slice(0, 20),
+          stats: calculateMarketStats(listings)
+        };
+      } catch (error) {
+        console.error('Market scraping failed:', error);
+      }
+      
+      // Calculate delta
+      let delta = null;
+      if (dvfResult.stats && marketResult.stats) {
+        const dvfPrice = dvfResult.stats.weightedAverage;
+        const marketPrice = marketResult.stats.medianPricePerM2;
+        delta = ((marketPrice - dvfPrice) / dvfPrice * 100).toFixed(1);
+      }
+      
+      return NextResponse.json(
+        {
+          dvf: dvfResult,
+          market: marketResult,
+          delta,
+          estimatedValue: dvfResult.stats ? Math.round(dvfResult.stats.weightedAverage * surface) : null
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Not found' },
+      { status: 404, headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', message: error.message },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
