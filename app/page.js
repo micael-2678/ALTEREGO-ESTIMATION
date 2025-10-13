@@ -195,32 +195,7 @@ export default function App() {
     }
   };
 
-  const handleSubmitLead = async () => {
-    if (!leadForm.name || !leadForm.email || !leadForm.consent) {
-      alert('Veuillez remplir tous les champs obligatoires et accepter les conditions.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...leadForm,
-          estimation: results,
-          property: formData
-        })
-      });
-      
-      setStep(7); // Confirmation
-    } catch (error) {
-      console.error('Lead submission error:', error);
-      alert('Erreur lors de l\'envoi. Veuillez réessayer.');
-    } finally {
-      setLoading(false);
-    }
-  };
+ 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
