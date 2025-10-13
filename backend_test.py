@@ -622,6 +622,19 @@ class APITester:
         self.test_get_leads_unauthorized()
         self.test_get_leads_authorized()
         
+        # NEW: Admin lead management tests
+        print("\n🔧 Testing New Admin Lead Management Endpoints...")
+        self.test_update_lead_status()
+        self.test_update_lead_contact_info()
+        self.test_add_lead_comment()
+        self.test_add_multiple_comments()
+        
+        # Authentication and error handling for new endpoints
+        self.test_update_lead_unauthorized()
+        self.test_comment_lead_unauthorized()
+        self.test_update_lead_invalid_id()
+        self.test_comment_lead_missing_params()
+        
         # Error handling tests
         self.test_invalid_endpoint()
         
