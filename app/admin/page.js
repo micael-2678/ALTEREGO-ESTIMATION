@@ -93,7 +93,7 @@ export default function AdminPage() {
 
   const updateLeadStatus = async (leadId, newStatus) => {
     try {
-      await fetch('/api/admin/leads/update', {
+      const res = await fetch('/api/admin/leads/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,9 +101,24 @@ export default function AdminPage() {
         },
         body: JSON.stringify({ leadId, status: newStatus })
       });
-      loadLeads(token);
+      
+      if (res.ok) {
+        // Update local state immediately for better UX
+        setLeads(prevLeads => 
+          prevLeads.map(lead => 
+            lead.id === leadId ? { ...lead, status: newStatus } : lead
+          )
+        );
+        if (selectedLead && selectedLead.id === leadId) {
+          setSelectedLead({ ...selectedLead, status: newStatus });
+        }
+      } else {
+        console.error('Failed to update status:', await res.text());
+        alert('Erreur lors de la mise à jour du statut');
+      }
     } catch (error) {
       console.error('Error updating status:', error);
+      alert('Erreur lors de la mise à jour du statut');
     }
   };
 
