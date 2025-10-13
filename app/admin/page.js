@@ -350,7 +350,11 @@ export default function AdminPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold">AlterEgo Admin</h1>
+              <img 
+                src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
+                alt="AlterEgo" 
+                className="h-10 w-auto"
+              />
               <Badge variant="outline" className="text-sm">{filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}</Badge>
             </div>
             <div className="flex items-center gap-4">
