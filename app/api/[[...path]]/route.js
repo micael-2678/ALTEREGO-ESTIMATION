@@ -277,14 +277,17 @@ export async function POST(request) {
         );
       }
       
-      // Get DVF comparables
-      const dvfResult = await getDVFComparables({
+      // Get DVF comparables with enhanced adaptive algorithm
+      const dvfResult = await getAdaptiveComparables({
         lat,
         lng,
         type,
         surface,
-        radiusMeters: 1000,
-        months: 24
+        initialRadiusMeters: 500,
+        maxRadiusMeters: 800,
+        months: 24,
+        maxMonths: 36,
+        minComparables: 8
       });
       
       // Get market listings
@@ -312,7 +315,58 @@ export async function POST(request) {
           dvf: dvfResult,
           market: marketResult,
           delta,
-          estimatedValue: dvfResult.stats ? Math.round(dvfResult.stats.weightedAverage * surface) : null
+          estimatedValue: dvfResult.stats ? Math.round(dvfResult.stats.weightedAverage * surface) : null,
+          disclaimer: 'Estimations basées sur DVF (open data) — valeurs indicatives, non contractuelles.'
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Trigger DVF ingestion (admin)
+    if (pathname === '/api/admin/dvf/ingest') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const { departments } = await request.json();
+      
+      if (!departments || !Array.isArray(departments) || departments.length === 0) {
+        return NextResponse.json(
+          { error: 'Invalid departments array' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Trigger ingestion asynchronously
+      setTimeout(async () => {
+        try {
+          for (const dept of departments) {
+            console.log(`[API] Starting ingestion for department ${dept}...`);
+            await ingestDVFDepartment(dept);
+          }
+        } catch (error) {
+          console.error('[API] Ingestion error:', error);
+        }
+      }, 100);
+      
+      return NextResponse.json(
+        { 
+          message: 'DVF ingestion started in background',
+          departments
         },
         { headers: corsHeaders }
       );
