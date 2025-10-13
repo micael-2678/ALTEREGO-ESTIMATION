@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://alterego-immo.preview.emergentagent.com"
+BASE_URL = "https://realprice-wizard.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

@@ -60,7 +60,7 @@ DB_NAME=alterego_db
 JWT_SECRET=alterego-secret-key-2025
 ADMIN_USERNAME=Micael
 ADMIN_PASSWORD=Micael123
-NEXT_PUBLIC_BASE_URL=https://alterego-immo.preview.emergentagent.com
+NEXT_PUBLIC_BASE_URL=https://realprice-wizard.preview.emergentagent.com
 ```
 
 ### Peupler les données DVF (sample)
@@ -108,7 +108,7 @@ const records = parse(csvContent, { columns: true });
 ## 🔐 Authentification Admin
 
 ### Connexion
-- URL : https://alterego-immo.preview.emergentagent.com/admin
+- URL : https://realprice-wizard.preview.emergentagent.com/admin
 - Identifiant : **Micael**
 - Mot de passe : **Micael123**
 
