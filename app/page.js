@@ -100,16 +100,18 @@ export default function App() {
         (formData.floor === '0' ? 'rdc' : formData.floor <= 3 ? '1-3' : '4+') : undefined,
       hasElevator: formData.floors > 0, // Si building a des étages, assume ascenseur possible
       
-      // Extérieur
+      // Extérieur (prend en compte la surface saisie)
       outside: formData.hasBalconyTerrace ? 
-        (formData.type === 'maison' || formData.totalSurface > formData.surface + 20 ? 'large_terrace_or_garden' : 'small_balcony') : 'none',
+        (parseFloat(formData.balconyTerraceSurface) > 15 || formData.type === 'maison' ? 'large_terrace_or_garden' : 'small_balcony') : 'none',
       
       // Vue
       view: formData.view,
       
-      // Parking
-      parking: formData.hasIndoorParking ? 'box_or_two' : 
-        (formData.hasOutdoorParking ? 'one' : 'none'),
+      // Parking (compte le nombre total)
+      parking: formData.hasIndoorParking ? 
+        (parseInt(formData.indoorParkingCount) >= 2 ? 'box_or_two' : 'one') :
+        formData.hasOutdoorParking ? 
+          (parseInt(formData.outdoorParkingCount) >= 2 ? 'box_or_two' : 'one') : 'none',
       
       // État/Standing (1-5 → condition)
       condition: formData.standing <= 2 ? 'to_renovate' : 
@@ -126,7 +128,13 @@ export default function App() {
       // Parcelle (maison)
       plot: formData.type === 'maison' && formData.totalSurface ? 
         (formData.totalSurface < 300 ? 'small' : 
-         formData.totalSurface < 600 ? 'medium' : 'large') : undefined
+         formData.totalSurface < 600 ? 'medium' : 'large') : undefined,
+      
+      // Données additionnelles pour référence
+      basementSurface: formData.basementSurface ? parseFloat(formData.basementSurface) : undefined,
+      balconyTerraceSurface: formData.balconyTerraceSurface ? parseFloat(formData.balconyTerraceSurface) : undefined,
+      outdoorParkingCount: formData.outdoorParkingCount ? parseInt(formData.outdoorParkingCount) : undefined,
+      indoorParkingCount: formData.indoorParkingCount ? parseInt(formData.indoorParkingCount) : undefined
     };
     
     // Remove undefined values
