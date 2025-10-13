@@ -577,6 +577,166 @@ class APITester:
         except Exception as e:
             self.log_result("Comment Missing Params", False, f"Request failed: {str(e)}")
     
+    def test_create_test_lead_for_deletion(self):
+        """Create a test lead specifically for deletion testing"""
+        try:
+            payload = {
+                'name': 'Marie Testeur',
+                'email': 'marie.testeur@example.com',
+                'phone': '+33555123456',
+                'address': '10 rue de la Paix, 75001 Paris',
+                'estimatedValue': 650000,
+                'message': 'Test lead for deletion - can be safely removed'
+            }
+            response = self.session.post(f"{API_BASE}/leads", json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success'] and 'leadId' in data:
+                    self.deletion_test_lead_id = data['leadId']
+                    self.log_result("Create Test Lead for Deletion", True, 
+                                  f"Test lead created for deletion with ID: {data['leadId']}", 
+                                  data)
+                else:
+                    self.log_result("Create Test Lead for Deletion", False, "Missing success confirmation or leadId")
+            else:
+                self.log_result("Create Test Lead for Deletion", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Create Test Lead for Deletion", False, f"Request failed: {str(e)}")
+    
+    def test_delete_lead_success(self):
+        """Test DELETE /api/admin/leads/delete - Successfully delete a lead"""
+        if not self.jwt_token:
+            self.log_result("Delete Lead Success", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'deletion_test_lead_id'):
+            self.log_result("Delete Lead Success", False, "No test lead ID available for deletion")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            params = {'leadId': self.deletion_test_lead_id}
+            response = self.session.delete(f"{API_BASE}/admin/leads/delete", params=params, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success'] and 'deleted' in data and data['deleted']:
+                    self.log_result("Delete Lead Success", True, 
+                                  f"Successfully deleted lead with ID: {self.deletion_test_lead_id}", data)
+                else:
+                    self.log_result("Delete Lead Success", False, "Success or deleted field missing or false")
+            else:
+                self.log_result("Delete Lead Success", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Delete Lead Success", False, f"Request failed: {str(e)}")
+    
+    def test_verify_lead_deletion(self):
+        """Verify that the deleted lead is no longer in the database"""
+        if not self.jwt_token:
+            self.log_result("Verify Lead Deletion", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'deletion_test_lead_id'):
+            self.log_result("Verify Lead Deletion", False, "No deletion test lead ID available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            response = self.session.get(f"{API_BASE}/leads", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'leads' in data:
+                    leads = data['leads']
+                    deleted_lead_found = any(lead['id'] == self.deletion_test_lead_id for lead in leads)
+                    
+                    if not deleted_lead_found:
+                        self.log_result("Verify Lead Deletion", True, 
+                                      f"Confirmed: deleted lead {self.deletion_test_lead_id} is no longer in database")
+                    else:
+                        self.log_result("Verify Lead Deletion", False, 
+                                      f"ERROR: deleted lead {self.deletion_test_lead_id} still exists in database")
+                else:
+                    self.log_result("Verify Lead Deletion", False, "Missing 'leads' field in response")
+            else:
+                self.log_result("Verify Lead Deletion", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Verify Lead Deletion", False, f"Request failed: {str(e)}")
+    
+    def test_delete_lead_invalid_id(self):
+        """Test DELETE /api/admin/leads/delete - Delete with invalid lead ID"""
+        if not self.jwt_token:
+            self.log_result("Delete Lead Invalid ID", False, "No JWT token available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            params = {'leadId': 'invalid-lead-id-99999'}
+            response = self.session.delete(f"{API_BASE}/admin/leads/delete", params=params, headers=headers)
+            
+            if response.status_code == 404:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Delete Lead Invalid ID", True, 
+                                  f"Correctly returned 404 for invalid lead ID: {data['error']}")
+                else:
+                    self.log_result("Delete Lead Invalid ID", False, "Missing error message in 404 response")
+            else:
+                self.log_result("Delete Lead Invalid ID", False, 
+                              f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Delete Lead Invalid ID", False, f"Request failed: {str(e)}")
+    
+    def test_delete_lead_unauthorized(self):
+        """Test DELETE /api/admin/leads/delete - Delete without authentication"""
+        try:
+            params = {'leadId': 'test-lead-id'}
+            response = self.session.delete(f"{API_BASE}/admin/leads/delete", params=params)
+            
+            if response.status_code == 401:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Delete Lead Unauthorized", True, 
+                                  f"Correctly rejected unauthorized delete: {data['error']}")
+                else:
+                    self.log_result("Delete Lead Unauthorized", False, "Missing error message in 401 response")
+            else:
+                self.log_result("Delete Lead Unauthorized", False, 
+                              f"Expected 401, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Delete Lead Unauthorized", False, f"Request failed: {str(e)}")
+    
+    def test_delete_lead_missing_id(self):
+        """Test DELETE /api/admin/leads/delete - Delete without lead ID parameter"""
+        if not self.jwt_token:
+            self.log_result("Delete Lead Missing ID", False, "No JWT token available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            # No leadId parameter provided
+            response = self.session.delete(f"{API_BASE}/admin/leads/delete", headers=headers)
+            
+            if response.status_code == 400:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Delete Lead Missing ID", True, 
+                                  f"Correctly returned 400 for missing lead ID: {data['error']}")
+                else:
+                    self.log_result("Delete Lead Missing ID", False, "Missing error message in 400 response")
+            else:
+                self.log_result("Delete Lead Missing ID", False, 
+                              f"Expected 400, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Delete Lead Missing ID", False, f"Request failed: {str(e)}")
+    
     def test_invalid_endpoint(self):
         """Test invalid endpoint"""
         try:
