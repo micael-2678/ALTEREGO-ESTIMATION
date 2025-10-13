@@ -72,13 +72,13 @@ export async function GET(request) {
       );
     }
 
-    // Get DVF comparables
+    // Get DVF comparables (Enhanced with adaptive algorithm)
     if (pathname === '/api/dvf/comparables') {
       const lat = parseFloat(searchParams.get('lat'));
       const lng = parseFloat(searchParams.get('lng'));
       const type = searchParams.get('type');
       const surface = parseFloat(searchParams.get('surface'));
-      const radiusMeters = parseInt(searchParams.get('radiusMeters')) || 1000;
+      const radiusMeters = parseInt(searchParams.get('radiusMeters')) || 500;
       const months = parseInt(searchParams.get('months')) || 24;
       
       if (!lat || !lng || !type || !surface) {
@@ -88,13 +88,17 @@ export async function GET(request) {
         );
       }
       
-      const result = await getDVFComparables({
+      // Use enhanced adaptive algorithm
+      const result = await getAdaptiveComparables({
         lat,
         lng,
         type,
         surface,
-        radiusMeters,
-        months
+        initialRadiusMeters: radiusMeters,
+        maxRadiusMeters: 800,
+        months,
+        maxMonths: 36,
+        minComparables: 8
       });
       
       return NextResponse.json(result, { headers: corsHeaders });
