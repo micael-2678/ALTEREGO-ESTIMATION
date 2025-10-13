@@ -144,6 +144,18 @@ export default function App() {
   const handleEstimate = async () => {
     setLoading(true);
     try {
+      // 1. Enregistrer le lead IMMÉDIATEMENT
+      await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...leadForm,
+          property: formData,
+          status: 'pending_estimation' // Lead capturé, estimation en cours
+        })
+      });
+      
+      // 2. Calculer l'estimation
       const characteristics = mapToCharacteristics();
       
       const res = await fetch('/api/estimate', {
@@ -161,7 +173,20 @@ export default function App() {
       
       const data = await res.json();
       setResults(data);
-      setStep(6); // Résultats
+      
+      // 3. Mettre à jour le lead avec l'estimation
+      await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...leadForm,
+          property: formData,
+          estimation: data,
+          status: 'estimation_complete'
+        })
+      });
+      
+      setStep(7); // Afficher résultats
     } catch (error) {
       console.error('Estimation error:', error);
       alert('Erreur lors de l\'estimation. Veuillez réessayer.');
