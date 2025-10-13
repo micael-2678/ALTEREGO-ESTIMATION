@@ -1,4 +1,7 @@
 // Script CLI pour ingérer les données DVF
+import { config } from 'dotenv';
+config(); // Load environment variables
+
 import { ingestDVFDepartment, ingestMultipleDepartments } from '../lib/dvf-ingestion.js';
 import { connectToDatabase } from '../lib/mongodb.js';
 
