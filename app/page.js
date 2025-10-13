@@ -709,26 +709,27 @@ export default function App() {
                 <div className="text-center">
                   <h3 className="text-2xl font-semibold mb-6">Estimation de votre bien</h3>
                   
-                  <div className="grid grid-cols-3 gap-6 mb-8">
-                    <div className="p-6 bg-white/10 rounded-lg backdrop-blur">
-                      <div className="text-sm opacity-80 mb-2">Fourchette basse</div>
-                      <div className="text-2xl font-bold">{results.finalPrice.low.toLocaleString()} €</div>
+                  <div className="grid grid-cols-2 gap-6 mb-8">
+                    <div className="p-8 bg-white/20 rounded-lg backdrop-blur border-2 border-white/30">
+                      <div className="text-sm opacity-80 mb-2">Prix Estimé</div>
+                      <div className="text-sm opacity-70 mb-3">(Basé sur DVF - données réelles)</div>
+                      <div className="text-4xl font-bold">{results.finalPrice.low.toLocaleString()} €</div>
                     </div>
                     
-                    <div className="p-6 bg-white/20 rounded-lg backdrop-blur border-2 border-white/30">
-                      <div className="text-sm opacity-80 mb-2">Prix estimé</div>
+                    <div className="p-8 bg-white/15 rounded-lg backdrop-blur">
+                      <div className="text-sm opacity-80 mb-2">Prix Conseillé de Mise en Vente</div>
+                      <div className="text-sm opacity-70 mb-3">(Optimisé marché actuel)</div>
                       <div className="text-4xl font-bold">{results.finalPrice.mid.toLocaleString()} €</div>
-                    </div>
-                    
-                    <div className="p-6 bg-white/10 rounded-lg backdrop-blur">
-                      <div className="text-sm opacity-80 mb-2">Fourchette haute</div>
-                      <div className="text-2xl font-bold">{results.finalPrice.high.toLocaleString()} €</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-center gap-4 text-sm">
+                  <div className="flex items-center justify-center gap-4 text-sm mb-4">
                     <span className="opacity-80">Indice de confiance:</span>
                     <span className="text-2xl font-bold">{results.finalPrice.confidence}/100</span>
+                  </div>
+                  
+                  <div className="text-xs opacity-70">
+                    Fourchette totale : {results.finalPrice.low.toLocaleString()} € - {results.finalPrice.high.toLocaleString()} €
                   </div>
                 </div>
               </Card>
