@@ -293,7 +293,14 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <Card className="w-full max-w-md p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-2">AlterEgo Admin</h1>
+            <div className="flex justify-center mb-4">
+              <img 
+                src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
+                alt="AlterEgo" 
+                className="h-16 w-auto"
+              />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Administration</h1>
             <p className="text-gray-600">Connectez-vous pour accéder au panneau d'administration</p>
           </div>
           
