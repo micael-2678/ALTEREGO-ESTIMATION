@@ -4,9 +4,15 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Download, Search } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Search, Download, Eye, MessageSquare, Edit, Phone, Mail, MapPin, Home, Calendar, Filter, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+const EstimationMap = dynamic(() => import('@/components/EstimationMap'), { ssr: false });
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -16,6 +22,13 @@ export default function AdminPage() {
   const [leads, setLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [token, setToken] = useState(null);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editedLead, setEditedLead] = useState(null);
+  const [newComment, setNewComment] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterType, setFilterType] = useState('all');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('adminToken');
@@ -78,28 +91,70 @@ export default function AdminPage() {
     setLeads([]);
   };
 
+  const updateLeadStatus = async (leadId, newStatus) => {
+    try {
+      await fetch('/api/admin/leads/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ leadId, status: newStatus })
+      });
+      loadLeads(token);
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
+  };
+
+  const addComment = async (leadId, comment) => {
+    if (!comment.trim()) return;
+    
+    try {
+      await fetch('/api/admin/leads/comment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          leadId, 
+          comment,
+          author: username,
+          timestamp: new Date().toISOString()
+        })
+      });
+      setNewComment('');
+      loadLeads(token);
+    } catch (error) {
+      console.error('Error adding comment:', error);
+    }
+  };
+
+  const saveLead = async () => {
+    try {
+      await fetch('/api/admin/leads/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          leadId: editedLead.id,
+          updates: editedLead
+        })
+      });
+      setShowEditModal(false);
+      loadLeads(token);
+    } catch (error) {
+      console.error('Error saving lead:', error);
+    }
+  };
+
   const exportToCSV = () => {
     const headers = [
-      'Date',
-      'Heure',
-      'Nom',
-      'Email',
-      'Téléphone',
-      'Adresse',
-      'Type',
-      'Surface (m²)',
-      'Prix Estimé (€)',
-      'Prix Conseillé (€)',
-      'Confiance (%)',
-      'Delta vs DVF (%)',
-      'Comparables',
-      'Statut',
-      // Détails supplémentaires
-      'Pièces',
-      'Salles de bains',
-      'Étage',
-      'DPE',
-      'Standing'
+      'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Adresse', 'Type', 'Surface (m²)',
+      'Prix Estimé (€)', 'Prix Conseillé (€)', 'Confiance (%)', 'Statut', 'Commentaires'
     ];
     
     const rows = filteredLeads.map(lead => [
@@ -111,20 +166,11 @@ export default function AdminPage() {
       lead.property?.address || '',
       lead.property?.type || '',
       lead.property?.surface || '',
-      lead.estimation?.finalPrice?.low || lead.estimation?.estimatedValue || '',
+      lead.estimation?.finalPrice?.low || '',
       lead.estimation?.finalPrice?.mid || '',
       lead.estimation?.finalPrice?.confidence || '',
-      lead.estimation?.adjustments?.deltaVsDvfPercent || '',
-      lead.estimation?.dvf?.count || '',
-      lead.status === 'estimation_complete' ? 'Complète' :
-      lead.status === 'pending_estimation' ? 'En cours' : 
-      lead.status || 'Nouveau',
-      // Détails
-      lead.property?.rooms || '',
-      lead.property?.bathrooms || '',
-      lead.property?.floor || '',
-      lead.property?.dpe || '',
-      lead.property?.standing || ''
+      lead.status || '',
+      lead.comments?.length || 0
     ]);
     
     const csvContent = [
@@ -140,14 +186,53 @@ export default function AdminPage() {
   };
 
   const filteredLeads = leads.filter(lead => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      lead.name?.toLowerCase().includes(query) ||
-      lead.email?.toLowerCase().includes(query) ||
-      lead.property?.address?.toLowerCase().includes(query)
-    );
+    if (!searchQuery && filterStatus === 'all' && filterType === 'all') return true;
+    
+    let matches = true;
+    
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      matches = matches && (
+        lead.name?.toLowerCase().includes(query) ||
+        lead.email?.toLowerCase().includes(query) ||
+        lead.property?.address?.toLowerCase().includes(query)
+      );
+    }
+    
+    if (filterStatus !== 'all') {
+      matches = matches && lead.status === filterStatus;
+    }
+    
+    if (filterType !== 'all') {
+      matches = matches && lead.property?.type === filterType;
+    }
+    
+    return matches;
   });
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'estimation_complete': return 'bg-green-100 text-green-800';
+      case 'pending_estimation': return 'bg-yellow-100 text-yellow-800';
+      case 'contacted': return 'bg-blue-100 text-blue-800';
+      case 'qualified': return 'bg-purple-100 text-purple-800';
+      case 'closed_won': return 'bg-green-600 text-white';
+      case 'closed_lost': return 'bg-gray-400 text-white';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch(status) {
+      case 'estimation_complete': return 'Estimation complète';
+      case 'pending_estimation': return 'En cours';
+      case 'contacted': return 'Contacté';
+      case 'qualified': return 'Qualifié';
+      case 'closed_won': return 'Gagné';
+      case 'closed_lost': return 'Perdu';
+      default: return 'Nouveau';
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -200,12 +285,15 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white border-b">
+      <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">AlterEgo Admin</h1>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">Connecté en tant que <strong>{username}</strong></span>
+              <h1 className="text-2xl font-bold">AlterEgo Admin</h1>
+              <Badge variant="outline" className="text-sm">{filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}</Badge>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">Connecté: <strong>{username}</strong></span>
               <Button onClick={handleLogout} variant="outline" size="sm">
                 Déconnexion
               </Button>
@@ -215,11 +303,11 @@ export default function AdminPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-4">Gestion des Leads</h2>
-          
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1 relative">
+        {/* Filters & Actions */}
+        <Card className="p-6 mb-6">
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* Search */}
+            <div className="flex-1 min-w-[300px] relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <Input
                 placeholder="Rechercher par nom, email ou adresse..."
@@ -228,122 +316,374 @@ export default function AdminPage() {
                 className="pl-10"
               />
             </div>
+            
+            {/* Filter Status */}
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="estimation_complete">Estimation complète</SelectItem>
+                <SelectItem value="contacted">Contacté</SelectItem>
+                <SelectItem value="qualified">Qualifié</SelectItem>
+                <SelectItem value="closed_won">Gagné</SelectItem>
+                <SelectItem value="closed_lost">Perdu</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Filter Type */}
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous types</SelectItem>
+                <SelectItem value="appartement">Appartement</SelectItem>
+                <SelectItem value="maison">Maison</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Reset Filters */}
+            {(filterStatus !== 'all' || filterType !== 'all' || searchQuery) && (
+              <Button variant="outline" size="sm" onClick={() => {
+                setFilterStatus('all');
+                setFilterType('all');
+                setSearchQuery('');
+              }}>
+                <X className="w-4 h-4 mr-2" /> Réinitialiser
+              </Button>
+            )}
+            
+            {/* Export */}
             <Button onClick={exportToCSV} className="bg-black hover:bg-gray-800 text-white">
               <Download className="w-4 h-4 mr-2" />
               Exporter CSV
             </Button>
           </div>
+        </Card>
 
-          <Card>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Téléphone</TableHead>
-                    <TableHead>Adresse</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Surface</TableHead>
-                    <TableHead className="text-right">Prix Estimé</TableHead>
-                    <TableHead className="text-right">Prix Conseillé</TableHead>
-                    <TableHead className="text-center">Confiance</TableHead>
-                    <TableHead>Statut</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLeads.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={11} className="text-center text-gray-500 py-8">
-                        Aucun lead trouvé
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredLeads.map((lead) => (
-                      <TableRow key={lead.id}>
-                        <TableCell className="whitespace-nowrap">
-                          {new Date(lead.createdAt).toLocaleDateString('fr-FR')}
-                          <div className="text-xs text-gray-500">
-                            {new Date(lead.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{lead.name}</TableCell>
-                        <TableCell>
-                          <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline">
-                            {lead.email}
-                          </a>
-                        </TableCell>
-                        <TableCell>
-                          {lead.phone ? (
-                            <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
-                              {lead.phone}
-                            </a>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="max-w-xs">
-                          <div className="truncate" title={lead.property?.address}>
-                            {lead.property?.address || '-'}
-                          </div>
-                          {lead.property?.lat && lead.property?.lng && (
-                            <div className="text-xs text-gray-500">
-                              {lead.property.lat.toFixed(4)}, {lead.property.lng.toFixed(4)}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="capitalize px-2 py-1 rounded text-xs bg-gray-100">
-                            {lead.property?.type || '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>{lead.property?.surface ? `${lead.property.surface} m²` : '-'}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {lead.estimation?.finalPrice?.low
-                            ? `${lead.estimation.finalPrice.low.toLocaleString()} €`
-                            : lead.estimation?.estimatedValue
-                            ? `${lead.estimation.estimatedValue.toLocaleString()} €`
-                            : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-green-600">
-                          {lead.estimation?.finalPrice?.mid
-                            ? `${lead.estimation.finalPrice.mid.toLocaleString()} €`
-                            : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {lead.estimation?.finalPrice?.confidence ? (
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                              lead.estimation.finalPrice.confidence >= 75 ? 'bg-green-100 text-green-800' :
-                              lead.estimation.finalPrice.confidence >= 65 ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {lead.estimation.finalPrice.confidence}%
-                            </span>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            lead.status === 'estimation_complete' ? 'bg-green-100 text-green-800' :
-                            lead.status === 'pending_estimation' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {lead.status === 'estimation_complete' ? 'Complète' :
-                             lead.status === 'pending_estimation' ? 'En cours' :
-                             lead.status || 'Nouveau'}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
+        {/* Leads Grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredLeads.map((lead) => (
+            <Card key={lead.id} className="p-6 hover:shadow-lg transition-shadow">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold mb-1">{lead.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    {new Date(lead.createdAt).toLocaleDateString('fr-FR', { 
+                      day: 'numeric', 
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+                <Badge className={getStatusColor(lead.status)}>
+                  {getStatusLabel(lead.status)}
+                </Badge>
+              </div>
+
+              {/* Contact Info */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="w-4 h-4 text-gray-400" />
+                  <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline truncate">
+                    {lead.email}
+                  </a>
+                </div>
+                {lead.phone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="w-4 h-4 text-gray-400" />
+                    <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
+                      {lead.phone}
+                    </a>
+                  </div>
+                )}
+                {lead.property?.address && (
+                  <div className="flex items-start gap-2 text-sm">
+                    <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                    <span className="text-gray-600 line-clamp-2">{lead.property.address}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Property Info */}
+              {lead.property && (
+                <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Home className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium capitalize">{lead.property.type}</span>
+                    </div>
+                    <span className="text-sm font-bold">{lead.property.surface} m²</span>
+                  </div>
+                  {lead.estimation?.finalPrice && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Prix estimé:</span>
+                        <span className="font-bold">{lead.estimation.finalPrice.low.toLocaleString()} €</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Confiance:</span>
+                        <Badge className={lead.estimation.finalPrice.confidence >= 75 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                          {lead.estimation.finalPrice.confidence}%
+                        </Badge>
+                      </div>
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
-          
-          <div className="mt-4 text-sm text-gray-600">
-            Total: <strong>{filteredLeads.length}</strong> lead{filteredLeads.length !== 1 ? 's' : ''}
-          </div>
+                </div>
+              )}
+
+              {/* Comments Badge */}
+              {lead.comments && lead.comments.length > 0 && (
+                <div className="mb-4">
+                  <Badge variant="outline" className="text-xs">
+                    <MessageSquare className="w-3 h-3 mr-1" />
+                    {lead.comments.length} commentaire{lead.comments.length > 1 ? 's' : ''}
+                  </Badge>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => {
+                    setSelectedLead(lead);
+                    setShowDetailModal(true);
+                  }}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Détails
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => {
+                    setEditedLead(lead);
+                    setShowEditModal(true);
+                  }}
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
         </div>
+
+        {filteredLeads.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">Aucun lead trouvé</p>
+          </div>
+        )}
       </main>
+
+      {/* Detail Modal */}
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedLead && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl flex items-center justify-between">
+                  <span>{selectedLead.name}</span>
+                  <Badge className={getStatusColor(selectedLead.status)}>
+                    {getStatusLabel(selectedLead.status)}
+                  </Badge>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Contact & Property Info */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card className="p-4">
+                    <h3 className="font-semibold mb-3">Informations contact</h3>
+                    <div className="space-y-2 text-sm">
+                      <div><strong>Email:</strong> <a href={`mailto:${selectedLead.email}`} className="text-blue-600">{selectedLead.email}</a></div>
+                      <div><strong>Téléphone:</strong> <a href={`tel:${selectedLead.phone}`} className="text-blue-600">{selectedLead.phone}</a></div>
+                      <div><strong>Date:</strong> {new Date(selectedLead.createdAt).toLocaleString('fr-FR')}</div>
+                    </div>
+                  </Card>
+
+                  <Card className="p-4">
+                    <h3 className="font-semibold mb-3">Bien immobilier</h3>
+                    <div className="space-y-2 text-sm">
+                      <div><strong>Type:</strong> <span className="capitalize">{selectedLead.property?.type}</span></div>
+                      <div><strong>Surface:</strong> {selectedLead.property?.surface} m²</div>
+                      <div><strong>Pièces:</strong> {selectedLead.property?.rooms}</div>
+                      <div><strong>Adresse:</strong> {selectedLead.property?.address}</div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Estimation */}
+                {selectedLead.estimation?.finalPrice && (
+                  <Card className="p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+                    <h3 className="font-semibold mb-4 text-xl">Estimation</h3>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-sm opacity-80 mb-1">Prix Estimé</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.low.toLocaleString()} €</div>
+                      </div>
+                      <div>
+                        <div className="text-sm opacity-80 mb-1">Prix Conseillé</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.mid.toLocaleString()} €</div>
+                      </div>
+                      <div>
+                        <div className="text-sm opacity-80 mb-1">Confiance</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.confidence}%</div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Change Status */}
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3">Changer le statut</h3>
+                  <Select 
+                    value={selectedLead.status || 'estimation_complete'} 
+                    onValueChange={(value) => updateLeadStatus(selectedLead.id, value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="estimation_complete">Estimation complète</SelectItem>
+                      <SelectItem value="contacted">Contacté</SelectItem>
+                      <SelectItem value="qualified">Qualifié</SelectItem>
+                      <SelectItem value="closed_won">Gagné</SelectItem>
+                      <SelectItem value="closed_lost">Perdu</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Card>
+
+                {/* Comments */}
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5" />
+                    Commentaires & Notes
+                  </h3>
+                  
+                  {/* Existing Comments */}
+                  {selectedLead.comments && selectedLead.comments.length > 0 && (
+                    <div className="space-y-3 mb-4">
+                      {selectedLead.comments.map((comment, idx) => (
+                        <div key={idx} className="bg-gray-50 p-3 rounded-lg">
+                          <div className="flex items-start justify-between mb-1">
+                            <span className="font-medium text-sm">{comment.author}</span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(comment.timestamp).toLocaleString('fr-FR')}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700">{comment.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Add Comment */}
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Ajouter un commentaire ou une note..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={3}
+                    />
+                    <Button 
+                      onClick={() => {
+                        addComment(selectedLead.id, newComment);
+                        setSelectedLead({
+                          ...selectedLead,
+                          comments: [...(selectedLead.comments || []), {
+                            author: username,
+                            comment: newComment,
+                            timestamp: new Date().toISOString()
+                          }]
+                        });
+                        setNewComment('');
+                      }}
+                      disabled={!newComment.trim()}
+                      className="w-full"
+                    >
+                      Ajouter le commentaire
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-2xl">
+          {editedLead && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Modifier le lead</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Nom</label>
+                    <Input
+                      value={editedLead.name}
+                      onChange={(e) => setEditedLead({ ...editedLead, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Email</label>
+                    <Input
+                      type="email"
+                      value={editedLead.email}
+                      onChange={(e) => setEditedLead({ ...editedLead, email: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Téléphone</label>
+                    <Input
+                      value={editedLead.phone}
+                      onChange={(e) => setEditedLead({ ...editedLead, phone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Statut</label>
+                    <Select 
+                      value={editedLead.status || 'estimation_complete'} 
+                      onValueChange={(value) => setEditedLead({ ...editedLead, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="estimation_complete">Estimation complète</SelectItem>
+                        <SelectItem value="contacted">Contacté</SelectItem>
+                        <SelectItem value="qualified">Qualifié</SelectItem>
+                        <SelectItem value="closed_won">Gagné</SelectItem>
+                        <SelectItem value="closed_lost">Perdu</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                  Annuler
+                </Button>
+                <Button onClick={saveLead} className="bg-black hover:bg-gray-800">
+                  Enregistrer
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
