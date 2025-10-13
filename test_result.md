@@ -171,7 +171,7 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "testing"
@@ -182,6 +182,12 @@ backend:
         - working: "NA"
           agent: "main"
           comment: "Added POST /api/admin/leads/comment endpoint to add timestamped comments to leads with JWT authentication. Comments stored as array with author, comment, and timestamp fields. Needs testing."
+        - working: "NA"
+          agent: "main"
+          comment: "Added DELETE /api/admin/leads/delete endpoint to delete leads with JWT authentication and leadId parameter. Needs testing."
+        - working: true
+          agent: "testing"
+          comment: "✅ Complete admin lead management system tested successfully: UPDATE endpoint (status & contact info updates), COMMENT endpoint (timestamped comment history), DELETE endpoint (lead removal with verification). All endpoints properly authenticated, error handling verified (401/404/400), and database operations confirmed. 27/27 tests passed (100% success rate)."
 
   - task: "Market Listings Scraping API"
     implemented: true
