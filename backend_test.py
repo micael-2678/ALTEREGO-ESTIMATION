@@ -323,6 +323,9 @@ class APITester:
                 data = response.json()
                 if 'leads' in data:
                     leads_count = len(data['leads'])
+                    # Store a lead ID for later tests if available
+                    if leads_count > 0:
+                        self.test_lead_id = data['leads'][0]['id']
                     self.log_result("Get Leads Authorized", True, 
                                   f"Retrieved {leads_count} leads successfully", 
                                   {'leads_count': leads_count})
@@ -333,6 +336,245 @@ class APITester:
                 
         except Exception as e:
             self.log_result("Get Leads Authorized", False, f"Request failed: {str(e)}")
+    
+    def test_update_lead_status(self):
+        """Test POST /api/admin/leads/update - Update lead status"""
+        if not self.jwt_token:
+            self.log_result("Update Lead Status", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'test_lead_id'):
+            self.log_result("Update Lead Status", False, "No test lead ID available (create lead first)")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            payload = {
+                'leadId': self.test_lead_id,
+                'status': 'contacted'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/update", json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success']:
+                    self.log_result("Update Lead Status", True, 
+                                  f"Successfully updated lead status to 'contacted'", data)
+                else:
+                    self.log_result("Update Lead Status", False, "Success field missing or false")
+            else:
+                self.log_result("Update Lead Status", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Update Lead Status", False, f"Request failed: {str(e)}")
+    
+    def test_update_lead_contact_info(self):
+        """Test POST /api/admin/leads/update - Update lead contact information"""
+        if not self.jwt_token:
+            self.log_result("Update Lead Contact Info", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'test_lead_id'):
+            self.log_result("Update Lead Contact Info", False, "No test lead ID available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            payload = {
+                'leadId': self.test_lead_id,
+                'updates': {
+                    'name': 'Jean Dupont Updated',
+                    'email': 'jean.updated@example.com',
+                    'phone': '+33987654321'
+                }
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/update", json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success']:
+                    self.log_result("Update Lead Contact Info", True, 
+                                  f"Successfully updated lead contact information", data)
+                else:
+                    self.log_result("Update Lead Contact Info", False, "Success field missing or false")
+            else:
+                self.log_result("Update Lead Contact Info", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Update Lead Contact Info", False, f"Request failed: {str(e)}")
+    
+    def test_add_lead_comment(self):
+        """Test POST /api/admin/leads/comment - Add comment to lead"""
+        if not self.jwt_token:
+            self.log_result("Add Lead Comment", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'test_lead_id'):
+            self.log_result("Add Lead Comment", False, "No test lead ID available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            payload = {
+                'leadId': self.test_lead_id,
+                'comment': 'Initial contact made via phone call',
+                'author': 'Admin Micael'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/comment", json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success'] and 'comment' in data:
+                    comment = data['comment']
+                    if 'author' in comment and 'comment' in comment and 'timestamp' in comment:
+                        self.log_result("Add Lead Comment", True, 
+                                      f"Successfully added comment by {comment['author']}: '{comment['comment']}'", 
+                                      data)
+                    else:
+                        self.log_result("Add Lead Comment", False, "Comment object missing required fields")
+                else:
+                    self.log_result("Add Lead Comment", False, "Success field or comment missing")
+            else:
+                self.log_result("Add Lead Comment", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Add Lead Comment", False, f"Request failed: {str(e)}")
+    
+    def test_add_multiple_comments(self):
+        """Test adding multiple comments to verify comment history"""
+        if not self.jwt_token:
+            self.log_result("Add Multiple Comments", False, "No JWT token available")
+            return
+            
+        if not hasattr(self, 'test_lead_id'):
+            self.log_result("Add Multiple Comments", False, "No test lead ID available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            
+            # Add second comment
+            payload = {
+                'leadId': self.test_lead_id,
+                'comment': 'Follow-up email sent with property details',
+                'author': 'Admin Assistant'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/comment", json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'success' in data and data['success']:
+                    self.log_result("Add Multiple Comments", True, 
+                                  f"Successfully added second comment to lead history", data)
+                else:
+                    self.log_result("Add Multiple Comments", False, "Failed to add second comment")
+            else:
+                self.log_result("Add Multiple Comments", False, f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_result("Add Multiple Comments", False, f"Request failed: {str(e)}")
+    
+    def test_update_lead_unauthorized(self):
+        """Test updating lead without authentication"""
+        try:
+            payload = {
+                'leadId': 'test-id',
+                'status': 'contacted'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/update", json=payload)
+            
+            if response.status_code == 401:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Update Lead Unauthorized", True, 
+                                  f"Correctly rejected unauthorized update: {data['error']}")
+                else:
+                    self.log_result("Update Lead Unauthorized", False, "Missing error message in 401 response")
+            else:
+                self.log_result("Update Lead Unauthorized", False, 
+                              f"Expected 401, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Update Lead Unauthorized", False, f"Request failed: {str(e)}")
+    
+    def test_comment_lead_unauthorized(self):
+        """Test adding comment without authentication"""
+        try:
+            payload = {
+                'leadId': 'test-id',
+                'comment': 'Test comment'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/comment", json=payload)
+            
+            if response.status_code == 401:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Comment Lead Unauthorized", True, 
+                                  f"Correctly rejected unauthorized comment: {data['error']}")
+                else:
+                    self.log_result("Comment Lead Unauthorized", False, "Missing error message in 401 response")
+            else:
+                self.log_result("Comment Lead Unauthorized", False, 
+                              f"Expected 401, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Comment Lead Unauthorized", False, f"Request failed: {str(e)}")
+    
+    def test_update_lead_invalid_id(self):
+        """Test updating lead with invalid ID"""
+        if not self.jwt_token:
+            self.log_result("Update Lead Invalid ID", False, "No JWT token available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            payload = {
+                'leadId': 'invalid-lead-id-12345',
+                'status': 'contacted'
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/update", json=payload, headers=headers)
+            
+            if response.status_code == 404:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Update Lead Invalid ID", True, 
+                                  f"Correctly returned 404 for invalid lead ID: {data['error']}")
+                else:
+                    self.log_result("Update Lead Invalid ID", False, "Missing error message in 404 response")
+            else:
+                self.log_result("Update Lead Invalid ID", False, 
+                              f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Update Lead Invalid ID", False, f"Request failed: {str(e)}")
+    
+    def test_comment_lead_missing_params(self):
+        """Test adding comment with missing required parameters"""
+        if not self.jwt_token:
+            self.log_result("Comment Missing Params", False, "No JWT token available")
+            return
+            
+        try:
+            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+            payload = {
+                'leadId': 'test-id'
+                # Missing required 'comment' field
+            }
+            response = self.session.post(f"{API_BASE}/admin/leads/comment", json=payload, headers=headers)
+            
+            if response.status_code == 400:
+                data = response.json()
+                if 'error' in data:
+                    self.log_result("Comment Missing Params", True, 
+                                  f"Correctly returned 400 for missing comment: {data['error']}")
+                else:
+                    self.log_result("Comment Missing Params", False, "Missing error message in 400 response")
+            else:
+                self.log_result("Comment Missing Params", False, 
+                              f"Expected 400, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Comment Missing Params", False, f"Request failed: {str(e)}")
     
     def test_invalid_endpoint(self):
         """Test invalid endpoint"""
