@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase, getCollection } from '../../../lib/mongodb';
 import { getDVFComparables } from '../../../lib/dvf';
 import { getAdaptiveComparables } from '../../../lib/dvf-enhanced';
+import { calculateAdjustments, calculateAdjustedPrice } from '../../../lib/dvf-adjustments';
 import { ingestDVFDepartment } from '../../../lib/dvf-ingestion';
 import { scrapeSeLoger, calculateMarketStats } from '../../../lib/scraper';
 import jwt from 'jsonwebtoken';
@@ -30,7 +31,7 @@ export async function GET(request) {
     // Root endpoint
     if (pathname === '/api/' || pathname === '/api') {
       return NextResponse.json(
-        { message: 'AlterEgo API is running', version: '1.0.0' },
+        { message: 'AlterEgo API is running', version: '2.0.0' },
         { headers: corsHeaders }
       );
     }
@@ -266,7 +267,7 @@ export async function POST(request) {
       );
     }
 
-    // Full estimation (DVF + Market)
+    // Full estimation with adjustments (DVF + Market)
     if (pathname === '/api/estimate') {
       const { address, lat, lng, type, surface, characteristics } = await request.json();
       
@@ -290,6 +291,36 @@ export async function POST(request) {
         minComparables: 8
       });
       
+      // Calculate adjustments if we have DVF data
+      let adjustmentData = null;
+      let finalPrice = null;
+      
+      if (dvfResult.stats) {
+        const adjustmentResult = calculateAdjustments(
+          { ...characteristics, type, surface },
+          dvfResult
+        );
+        
+        const priceData = calculateAdjustedPrice(
+          dvfResult.stats.weightedAverage,
+          surface,
+          adjustmentResult,
+          dvfResult
+        );
+        
+        adjustmentData = {
+          ...adjustmentResult,
+          ...priceData
+        };
+        
+        finalPrice = {
+          mid: priceData.priceMid,
+          low: priceData.priceLow,
+          high: priceData.priceHigh,
+          confidence: priceData.confidence
+        };
+      }
+      
       // Get market listings
       let marketResult = { listings: [], stats: null };
       try {
@@ -304,19 +335,20 @@ export async function POST(request) {
       
       // Calculate delta
       let delta = null;
-      if (dvfResult.stats && marketResult.stats) {
-        const dvfPrice = dvfResult.stats.weightedAverage;
+      if (adjustmentData && marketResult.stats) {
+        const adjustedPrice = adjustmentData.adjustedPricePerM2;
         const marketPrice = marketResult.stats.medianPricePerM2;
-        delta = ((marketPrice - dvfPrice) / dvfPrice * 100).toFixed(1);
+        delta = ((marketPrice - adjustedPrice) / adjustedPrice * 100).toFixed(1);
       }
       
       return NextResponse.json(
         {
           dvf: dvfResult,
+          adjustments: adjustmentData,
+          finalPrice,
           market: marketResult,
           delta,
-          estimatedValue: dvfResult.stats ? Math.round(dvfResult.stats.weightedAverage * surface) : null,
-          disclaimer: 'Estimations basées sur DVF (open data) — valeurs indicatives, non contractuelles.'
+          disclaimer: 'Estimations basées sur DVF (open data) et ajustements selon caractéristiques — valeurs indicatives, non contractuelles.'
         },
         { headers: corsHeaders }
       );
