@@ -708,16 +708,34 @@ export default function AdminPage() {
           {editedLead && (
             <>
               <DialogHeader>
-                <DialogTitle>Modifier le lead</DialogTitle>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>Modifier le lead</span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteLead(editedLead.id)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Supprimer
+                  </Button>
+                </DialogTitle>
               </DialogHeader>
 
               <div className="space-y-4">
+                <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
+                  💡 Les modifications sont enregistrées automatiquement
+                </div>
+                
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Nom</label>
                     <Input
                       value={editedLead.name}
-                      onChange={(e) => setEditedLead({ ...editedLead, name: e.target.value })}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setEditedLead({ ...editedLead, name: newValue });
+                      }}
+                      onBlur={(e) => updateLeadField(editedLead.id, 'name', e.target.value)}
                     />
                   </div>
                   <div>
@@ -725,21 +743,32 @@ export default function AdminPage() {
                     <Input
                       type="email"
                       value={editedLead.email}
-                      onChange={(e) => setEditedLead({ ...editedLead, email: e.target.value })}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setEditedLead({ ...editedLead, email: newValue });
+                      }}
+                      onBlur={(e) => updateLeadField(editedLead.id, 'email', e.target.value)}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Téléphone</label>
                     <Input
                       value={editedLead.phone}
-                      onChange={(e) => setEditedLead({ ...editedLead, phone: e.target.value })}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setEditedLead({ ...editedLead, phone: newValue });
+                      }}
+                      onBlur={(e) => updateLeadField(editedLead.id, 'phone', e.target.value)}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Statut</label>
                     <Select 
                       value={editedLead.status || 'estimation_complete'} 
-                      onValueChange={(value) => setEditedLead({ ...editedLead, status: value })}
+                      onValueChange={(value) => {
+                        setEditedLead({ ...editedLead, status: value });
+                        updateLeadField(editedLead.id, 'status', value);
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -758,10 +787,7 @@ export default function AdminPage() {
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowEditModal(false)}>
-                  Annuler
-                </Button>
-                <Button onClick={saveLead} className="bg-black hover:bg-gray-800">
-                  Enregistrer
+                  Fermer
                 </Button>
               </DialogFooter>
             </>
