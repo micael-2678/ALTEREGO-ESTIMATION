@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Download, Eye, MessageSquare, Edit, Phone, Mail, MapPin, Home, Calendar, Filter, X } from 'lucide-react';
+import { Loader2, Search, Download, Eye, MessageSquare, Edit, Phone, Mail, MapPin, Home, Calendar, Filter, X, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
