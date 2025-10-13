@@ -224,12 +224,13 @@ class APITester:
             
             if response.status_code == 200:
                 data = response.json()
-                required_fields = ['dvf', 'market', 'delta', 'estimatedValue']
+                required_fields = ['dvf', 'market', 'delta', 'finalPrice']
                 
                 if all(field in data for field in required_fields):
                     dvf_count = data['dvf'].get('count', 0)
                     market_count = len(data['market'].get('listings', []))
-                    estimated_value = data.get('estimatedValue')
+                    final_price = data.get('finalPrice')
+                    estimated_value = final_price.get('mid') if final_price else None
                     
                     self.log_result("Full Estimation", True, 
                                   f"DVF: {dvf_count} comparables, Market: {market_count} listings, "
