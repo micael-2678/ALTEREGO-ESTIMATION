@@ -208,3 +208,5 @@ test_plan:
 agent_communication:
     - agent: "testing"
       message: "Comprehensive backend API testing completed. All 13 test cases executed successfully. Core functionality (DVF data, authentication, estimation, lead management) working correctly. SeLoger scraping fails as expected in test environment but is handled gracefully. DVF sample data (7 records) properly populated and functional. Ready for production use."
+    - agent: "main"
+      message: "Added new admin endpoints for lead management: POST /api/admin/leads/update (update lead status and contact info) and POST /api/admin/leads/comment (add timestamped comments with history). These endpoints require JWT authentication. Need testing to verify they work correctly with the existing admin UI."
