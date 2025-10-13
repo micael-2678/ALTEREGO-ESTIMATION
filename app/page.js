@@ -935,43 +935,6 @@ export default function App() {
             </div>
           </div>
         )}
-                onClick={() => {
-                  setStep(1);
-                  setFormData({
-                    address: '',
-                    lat: null,
-                    lng: null,
-                    type: '',
-                    surface: '',
-                    totalSurface: '',
-                    rooms: '',
-                    bathrooms: '',
-                    floors: '',
-                    floor: '',
-                    hasBasement: false,
-                    basementSurface: '',
-                    hasBalconyTerrace: false,
-                    balconyTerraceSurface: '',
-                    hasOutdoorParking: false,
-                    outdoorParkingCount: '',
-                    hasIndoorParking: false,
-                    indoorParkingCount: '',
-                    hasPool: false,
-                    view: '',
-                    yearBuilt: '',
-                    dpe: '',
-                    standing: 3
-                  });
-                  setResults(null);
-                  setLeadForm({ name: '', email: '', phone: '', consent: false });
-                }}
-                className="bg-black hover:bg-gray-800 text-white"
-              >
-                Nouvelle estimation
-              </Button>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Footer */}
