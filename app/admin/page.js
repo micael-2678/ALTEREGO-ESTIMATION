@@ -212,14 +212,16 @@ export default function AdminPage() {
                     <TableHead>Adresse</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Surface</TableHead>
-                    <TableHead className="text-right">Est. DVF</TableHead>
-                    <TableHead className="text-right">Est. Marché</TableHead>
+                    <TableHead className="text-right">Prix Estimé</TableHead>
+                    <TableHead className="text-right">Prix Conseillé</TableHead>
+                    <TableHead className="text-center">Confiance</TableHead>
+                    <TableHead>Statut</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLeads.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-gray-500 py-8">
+                      <TableCell colSpan={11} className="text-center text-gray-500 py-8">
                         Aucun lead trouvé
                       </TableCell>
                     </TableRow>
@@ -228,24 +230,72 @@ export default function AdminPage() {
                       <TableRow key={lead.id}>
                         <TableCell className="whitespace-nowrap">
                           {new Date(lead.createdAt).toLocaleDateString('fr-FR')}
+                          <div className="text-xs text-gray-500">
+                            {new Date(lead.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </TableCell>
                         <TableCell className="font-medium">{lead.name}</TableCell>
-                        <TableCell>{lead.email}</TableCell>
-                        <TableCell>{lead.phone || '-'}</TableCell>
-                        <TableCell className="max-w-xs truncate" title={lead.property?.address}>
-                          {lead.property?.address || '-'}
+                        <TableCell>
+                          <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline">
+                            {lead.email}
+                          </a>
                         </TableCell>
-                        <TableCell className="capitalize">{lead.property?.type || '-'}</TableCell>
+                        <TableCell>
+                          {lead.phone ? (
+                            <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
+                              {lead.phone}
+                            </a>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          <div className="truncate" title={lead.property?.address}>
+                            {lead.property?.address || '-'}
+                          </div>
+                          {lead.property?.lat && lead.property?.lng && (
+                            <div className="text-xs text-gray-500">
+                              {lead.property.lat.toFixed(4)}, {lead.property.lng.toFixed(4)}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="capitalize px-2 py-1 rounded text-xs bg-gray-100">
+                            {lead.property?.type || '-'}
+                          </span>
+                        </TableCell>
                         <TableCell>{lead.property?.surface ? `${lead.property.surface} m²` : '-'}</TableCell>
                         <TableCell className="text-right font-semibold">
-                          {lead.estimation?.estimatedValue
+                          {lead.estimation?.finalPrice?.low
+                            ? `${lead.estimation.finalPrice.low.toLocaleString()} €`
+                            : lead.estimation?.estimatedValue
                             ? `${lead.estimation.estimatedValue.toLocaleString()} €`
                             : '-'}
                         </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {lead.estimation?.market?.stats?.medianPricePerM2 && lead.property?.surface
-                            ? `${Math.round(lead.estimation.market.stats.medianPricePerM2 * parseFloat(lead.property.surface)).toLocaleString()} €`
+                        <TableCell className="text-right font-semibold text-green-600">
+                          {lead.estimation?.finalPrice?.mid
+                            ? `${lead.estimation.finalPrice.mid.toLocaleString()} €`
                             : '-'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {lead.estimation?.finalPrice?.confidence ? (
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                              lead.estimation.finalPrice.confidence >= 75 ? 'bg-green-100 text-green-800' :
+                              lead.estimation.finalPrice.confidence >= 65 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {lead.estimation.finalPrice.confidence}%
+                            </span>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            lead.status === 'estimation_complete' ? 'bg-green-100 text-green-800' :
+                            lead.status === 'pending_estimation' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {lead.status === 'estimation_complete' ? 'Complète' :
+                             lead.status === 'pending_estimation' ? 'En cours' :
+                             lead.status || 'Nouveau'}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))
