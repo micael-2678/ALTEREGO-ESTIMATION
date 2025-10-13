@@ -171,11 +171,17 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
         - working: true
           agent: "testing"
           comment: "✅ POST /api/leads and GET /api/leads working correctly - can submit leads with UUID generation and retrieve leads with proper JWT authentication. Unauthorized access properly blocked"
+        - working: "NA"
+          agent: "main"
+          comment: "Added POST /api/admin/leads/update endpoint to update lead status, name, email, phone with JWT authentication. Needs testing."
+        - working: "NA"
+          agent: "main"
+          comment: "Added POST /api/admin/leads/comment endpoint to add timestamped comments to leads with JWT authentication. Comments stored as array with author, comment, and timestamp fields. Needs testing."
 
   - task: "Market Listings Scraping API"
     implemented: true
