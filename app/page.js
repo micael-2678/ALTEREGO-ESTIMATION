@@ -676,23 +676,107 @@ export default function App() {
                 </div>
                 
                 <Button
-                  onClick={handleEstimate}
-                  disabled={loading}
+                  onClick={() => setStep(6)}
                   className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
                 >
-                  {loading ? (
-                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Calcul en cours...</>
-                  ) : (
-                    <>Voir mon estimation <ArrowRight className="w-5 h-5 ml-2" /></>
-                  )}
+                  Continuer <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </div>
             </Card>
           </div>
         )}
 
-        {/* Étape 6: Résultats */}
-        {step === 6 && results && (
+        {/* Étape 6: FORMULAIRE LEAD (AVANT RÉSULTATS) */}
+        {step === 6 && (
+          <div className="max-w-4xl mx-auto">
+            <Button onClick={() => setStep(5)} variant="outline" className="mb-6">← Retour</Button>
+            
+            <Card className="p-8 bg-gradient-to-br from-gray-50 to-white border-2">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-green-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-4xl font-bold mb-3">🎯 Votre estimation est prête !</h2>
+                <p className="text-xl text-gray-600 mb-2">
+                  Pour consulter <strong>gratuitement</strong> votre estimation détaillée et bénéficier d'un accompagnement personnalisé
+                </p>
+                <p className="text-gray-500">
+                  Un expert immobilier vous contactera pour affiner votre estimation et vous conseiller
+                </p>
+              </div>
+
+              <div className="max-w-md mx-auto space-y-4 mb-6">
+                <div>
+                  <Label className="font-semibold">Nom complet *</Label>
+                  <Input
+                    placeholder="Ex: Jean Dupont"
+                    value={leadForm.name}
+                    onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                    className="mt-2"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="font-semibold">Email *</Label>
+                  <Input
+                    type="email"
+                    placeholder="Ex: jean.dupont@email.com"
+                    value={leadForm.email}
+                    onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
+                    className="mt-2"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="font-semibold">Téléphone *</Label>
+                  <Input
+                    type="tel"
+                    placeholder="Ex: 06 12 34 56 78"
+                    value={leadForm.phone}
+                    onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
+                    className="mt-2"
+                  />
+                </div>
+                
+                <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    checked={leadForm.consent}
+                    onChange={(e) => setLeadForm({ ...leadForm, consent: e.target.checked })}
+                    className="mt-1 w-5 h-5"
+                    id="consent"
+                  />
+                  <label htmlFor="consent" className="text-sm text-gray-700">
+                    J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée et bénéficier d'un accompagnement personnalisé dans mon projet de vente. *
+                  </label>
+                </div>
+                
+                <Button
+                  onClick={handleEstimate}
+                  disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.consent || loading}
+                  className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                >
+                  {loading ? (
+                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Calcul en cours...</>
+                  ) : (
+                    <>Voir mon estimation gratuite <ArrowRight className="w-5 h-5 ml-2" /></>
+                  )}
+                </Button>
+              </div>
+
+              <div className="text-center space-y-2 text-sm text-gray-500">
+                <p>✓ Estimation 100% gratuite et sans engagement</p>
+                <p>✓ Basée sur les données officielles DVF</p>
+                <p>✓ Accompagnement par un expert local</p>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Étape 7: Résultats */}
+        {step === 7 && results && (
           <div className="max-w-6xl mx-auto">
             <div className="mb-8">
               <Button onClick={() => setStep(1)} variant="outline" className="mb-4">
