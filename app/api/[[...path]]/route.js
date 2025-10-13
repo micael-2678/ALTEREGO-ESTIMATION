@@ -404,6 +404,131 @@ export async function POST(request) {
       );
     }
 
+    // Update lead (admin) - update status, contact info, etc.
+    if (pathname === '/api/admin/leads/update') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const { leadId, status, updates } = await request.json();
+      
+      if (!leadId) {
+        return NextResponse.json(
+          { error: 'Lead ID is required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('leads');
+      
+      // Build update object
+      const updateObj = {};
+      
+      if (status) {
+        updateObj.status = status;
+      }
+      
+      if (updates) {
+        // Allow updating specific fields
+        if (updates.name) updateObj.name = updates.name;
+        if (updates.email) updateObj.email = updates.email;
+        if (updates.phone !== undefined) updateObj.phone = updates.phone;
+        if (updates.status) updateObj.status = updates.status;
+      }
+      
+      // Add last modified timestamp
+      updateObj.lastModified = new Date().toISOString();
+      
+      const result = await collection.updateOne(
+        { id: leadId },
+        { $set: updateObj }
+      );
+      
+      if (result.matchedCount === 0) {
+        return NextResponse.json(
+          { error: 'Lead not found' },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { success: true, updated: result.modifiedCount > 0 },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Add comment to lead (admin)
+    if (pathname === '/api/admin/leads/comment') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const { leadId, comment, author, timestamp } = await request.json();
+      
+      if (!leadId || !comment) {
+        return NextResponse.json(
+          { error: 'Lead ID and comment are required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('leads');
+      
+      const commentObj = {
+        author: author || 'Admin',
+        comment,
+        timestamp: timestamp || new Date().toISOString()
+      };
+      
+      const result = await collection.updateOne(
+        { id: leadId },
+        { 
+          $push: { comments: commentObj },
+          $set: { lastModified: new Date().toISOString() }
+        }
+      );
+      
+      if (result.matchedCount === 0) {
+        return NextResponse.json(
+          { error: 'Lead not found' },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { success: true, comment: commentObj },
+        { headers: corsHeaders }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Not found' },
       { status: 404, headers: corsHeaders }
