@@ -205,26 +205,6 @@ export default function AdminPage() {
     }
   };
 
-  const saveLead = async () => {
-    try {
-      await fetch('/api/admin/leads/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          leadId: editedLead.id,
-          updates: editedLead
-        })
-      });
-      setShowEditModal(false);
-      loadLeads(token);
-    } catch (error) {
-      console.error('Error saving lead:', error);
-    }
-  };
-
   const exportToCSV = () => {
     const headers = [
       'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Adresse', 'Type', 'Surface (m²)',
