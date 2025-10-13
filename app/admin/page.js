@@ -146,6 +146,65 @@ export default function AdminPage() {
     }
   };
 
+  const updateLeadField = async (leadId, field, value) => {
+    try {
+      const updates = { [field]: value };
+      const res = await fetch('/api/admin/leads/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ leadId, updates })
+      });
+      
+      if (res.ok) {
+        // Update local state
+        setLeads(prevLeads => 
+          prevLeads.map(lead => 
+            lead.id === leadId ? { ...lead, [field]: value } : lead
+          )
+        );
+        if (selectedLead && selectedLead.id === leadId) {
+          setSelectedLead({ ...selectedLead, [field]: value });
+        }
+        if (editedLead && editedLead.id === leadId) {
+          setEditedLead({ ...editedLead, [field]: value });
+        }
+      }
+    } catch (error) {
+      console.error('Error updating field:', error);
+    }
+  };
+
+  const deleteLead = async (leadId) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce lead ? Cette action est irréversible.')) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/admin/leads/delete?leadId=${leadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        setLeads(prevLeads => prevLeads.filter(lead => lead.id !== leadId));
+        setShowDetailModal(false);
+        setShowEditModal(false);
+        setSelectedLead(null);
+        setEditedLead(null);
+      } else {
+        alert('Erreur lors de la suppression du lead');
+      }
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      alert('Erreur lors de la suppression du lead');
+    }
+  };
+
   const saveLead = async () => {
     try {
       await fetch('/api/admin/leads/update', {
