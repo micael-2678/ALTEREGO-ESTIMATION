@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, getCollection } from '../../../lib/mongodb';
 import { getDVFComparables } from '../../../lib/dvf';
+import { getAdaptiveComparables } from '../../../lib/dvf-enhanced';
+import { ingestDVFDepartment } from '../../../lib/dvf-ingestion';
 import { scrapeSeLoger, calculateMarketStats } from '../../../lib/scraper';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
