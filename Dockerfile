@@ -44,7 +44,8 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copier les fichiers nécessaires depuis le builder
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copier public et static si ils existent
+COPY --from=builder --chown=nextjs:nodejs /app/public* ./public/ 2>/dev/null || mkdir -p ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Changer vers l'utilisateur non-root
