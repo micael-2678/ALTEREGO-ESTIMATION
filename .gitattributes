@@ -1,0 +1,7 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Lock files should always be committed
+yarn.lock binary
+package-lock.json binary
+pnpm-lock.yaml binary
