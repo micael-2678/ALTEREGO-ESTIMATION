@@ -4,7 +4,7 @@
  * Script pour vérifier la présence et la quantité de données DVF dans MongoDB
  */
 
-const { connectToDatabase, getCollection } = require('../lib/mongodb');
+import { connectToDatabase, getCollection } from '../lib/mongodb.js';
 
 async function checkDVFData() {
   console.log('🔍 Vérification des données DVF...\n');
