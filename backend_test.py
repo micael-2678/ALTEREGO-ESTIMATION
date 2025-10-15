@@ -767,9 +767,250 @@ class APITester:
         except Exception as e:
             self.log_result("Invalid Endpoint", False, f"Request failed: {str(e)}")
     
+    def test_urgent_estimate_issue(self):
+        """URGENT: Test the specific /api/estimate issue reported by user"""
+        print("\n🚨 URGENT ISSUE TESTING 🚨")
+        print("Testing /api/estimate endpoint returning 0 comparables")
+        print("User expects: count > 0 with comparables")
+        print("Current issue: count = 0")
+        print("=" * 60)
+        
+        try:
+            print(f"Testing with exact user payload:")
+            print(json.dumps(URGENT_TEST_PAYLOAD, indent=2))
+            
+            response = self.session.post(f"{API_BASE}/estimate", json=URGENT_TEST_PAYLOAD, timeout=30)
+            
+            print(f"\nResponse Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Extract DVF results
+                dvf_data = data.get('dvf', {})
+                dvf_count = dvf_data.get('count', 0)
+                dvf_comparables = dvf_data.get('comparables', [])
+                dvf_stats = dvf_data.get('stats')
+                dvf_warning = dvf_data.get('warning')
+                dvf_radius = dvf_data.get('radius', 'Unknown')
+                dvf_months = dvf_data.get('months', 'Unknown')
+                
+                print(f"\n📊 DVF RESULTS:")
+                print(f"  Count: {dvf_count}")
+                print(f"  Comparables Array Length: {len(dvf_comparables)}")
+                print(f"  Search Radius: {dvf_radius}m")
+                print(f"  Search Months: {dvf_months}")
+                print(f"  Warning: {dvf_warning or 'None'}")
+                
+                if dvf_stats:
+                    print(f"  Stats Available: Yes")
+                    print(f"    Mean Price/m²: €{dvf_stats.get('meanPricePerM2', 'N/A')}")
+                    print(f"    Median Price/m²: €{dvf_stats.get('medianPricePerM2', 'N/A')}")
+                    print(f"    Confidence: {dvf_stats.get('confidenceIndex', 'N/A')}%")
+                else:
+                    print(f"  Stats Available: No")
+                
+                # Show sample comparables if any
+                if dvf_comparables:
+                    print(f"\n📍 SAMPLE COMPARABLES (first 3):")
+                    for i, comp in enumerate(dvf_comparables[:3]):
+                        print(f"  {i+1}. {comp.get('address', 'N/A')}")
+                        print(f"     Price: €{comp.get('price', 'N/A')} (€{comp.get('pricePerM2', 'N/A')}/m²)")
+                        print(f"     Surface: {comp.get('surface', 'N/A')}m²")
+                        print(f"     Distance: {comp.get('distance', 'N/A')}m")
+                        print(f"     Date: {comp.get('date', 'N/A')}")
+                
+                # Final assessment
+                if dvf_count == 0:
+                    self.log_result("URGENT: /api/estimate Issue", False, 
+                                  f"❌ CONFIRMED BUG: DVF count is 0 despite 5000 transactions in DB. "
+                                  f"Radius: {dvf_radius}m, Months: {dvf_months}, Warning: {dvf_warning}")
+                    return False
+                else:
+                    self.log_result("URGENT: /api/estimate Issue", True, 
+                                  f"✅ ISSUE RESOLVED: Found {dvf_count} DVF comparables. "
+                                  f"Average: €{dvf_stats.get('meanPricePerM2', 'N/A') if dvf_stats else 'N/A'}/m²")
+                    return True
+            else:
+                self.log_result("URGENT: /api/estimate Issue", False, 
+                              f"❌ API ERROR: HTTP {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            self.log_result("URGENT: /api/estimate Issue", False, 
+                          f"❌ REQUEST FAILED: {str(e)}")
+            return False
+
+    def test_database_dvf_status(self):
+        """Check DVF database status to understand data availability"""
+        print("\n🗄️ CHECKING DVF DATABASE STATUS")
+        print("=" * 40)
+        
+        # Login first
+        try:
+            login_payload = {"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD}
+            login_response = self.session.post(f"{API_BASE}/auth/login", json=login_payload, timeout=10)
+            
+            if login_response.status_code != 200:
+                self.log_result("DVF Database Status", False, "Failed to login for admin access")
+                return False
+                
+            token = login_response.json().get('token')
+            headers = {'Authorization': f'Bearer {token}'}
+            
+            # Get DVF status
+            status_response = self.session.get(f"{API_BASE}/admin/dvf/status", headers=headers, timeout=10)
+            
+            if status_response.status_code == 200:
+                status_data = status_response.json()
+                total = status_data.get('total', 0)
+                by_dept = status_data.get('byDepartment', [])
+                
+                print(f"📊 DATABASE STATS:")
+                print(f"  Total DVF Records: {total:,}")
+                
+                if total == 0:
+                    self.log_result("DVF Database Status", False, 
+                                  "❌ CRITICAL: No DVF data in database! This explains the 0 comparables.")
+                    return False
+                else:
+                    print(f"  Departments with data: {len(by_dept)}")
+                    
+                    # Show Paris data specifically (75)
+                    paris_data = next((d for d in by_dept if d.get('_id') == '75'), None)
+                    if paris_data:
+                        paris_count = paris_data.get('count', 0)
+                        paris_appts = paris_data.get('appartements', 0)
+                        print(f"  Paris (75) Records: {paris_count:,} ({paris_appts:,} appartements)")
+                    else:
+                        print(f"  ⚠️ WARNING: No Paris (75) data found!")
+                    
+                    # Show top 5 departments
+                    print(f"  Top departments:")
+                    for dept in sorted(by_dept, key=lambda x: x.get('count', 0), reverse=True)[:5]:
+                        dept_code = dept.get('_id', 'Unknown')
+                        count = dept.get('count', 0)
+                        appartements = dept.get('appartements', 0)
+                        print(f"    {dept_code}: {count:,} records ({appartements:,} appartements)")
+                    
+                    self.log_result("DVF Database Status", True, 
+                                  f"✅ Database has {total:,} DVF records across {len(by_dept)} departments")
+                    return True
+            else:
+                self.log_result("DVF Database Status", False, 
+                              f"Failed to get DVF status: HTTP {status_response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.log_result("DVF Database Status", False, f"Exception: {str(e)}")
+            return False
+
+    def test_direct_dvf_query(self):
+        """Test direct DVF comparables query to isolate the issue"""
+        print("\n🔍 TESTING DIRECT DVF QUERY")
+        print("=" * 40)
+        
+        # Use same coordinates as user's issue
+        params = {
+            'lat': URGENT_TEST_PAYLOAD['lat'],
+            'lng': URGENT_TEST_PAYLOAD['lng'],
+            'type': URGENT_TEST_PAYLOAD['type'],
+            'surface': URGENT_TEST_PAYLOAD['surface'],
+            'radiusMeters': 500,
+            'months': 24
+        }
+        
+        print(f"Testing /api/dvf/comparables with:")
+        for key, value in params.items():
+            print(f"  {key}: {value}")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/dvf/comparables", params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                count = data.get('count', 0)
+                comparables = data.get('comparables', [])
+                stats = data.get('stats')
+                warning = data.get('warning')
+                radius = data.get('radius', 'Unknown')
+                months = data.get('months', 'Unknown')
+                
+                print(f"\n📊 DIRECT DVF QUERY RESULTS:")
+                print(f"  Count: {count}")
+                print(f"  Comparables Length: {len(comparables)}")
+                print(f"  Final Radius: {radius}m")
+                print(f"  Final Months: {months}")
+                print(f"  Warning: {warning or 'None'}")
+                
+                if count == 0:
+                    self.log_result("Direct DVF Query", False, 
+                                  f"❌ Direct DVF query also returns 0 - confirms systematic issue. "
+                                  f"Radius: {radius}m, Months: {months}")
+                    return False
+                else:
+                    self.log_result("Direct DVF Query", True, 
+                                  f"✅ Direct DVF query found {count} comparables. "
+                                  f"Mean: €{stats.get('meanPricePerM2', 'N/A') if stats else 'N/A'}/m²")
+                    return True
+            else:
+                self.log_result("Direct DVF Query", False, 
+                              f"HTTP {response.status_code}: {response.text}")
+                return False
+                
+        except Exception as e:
+            self.log_result("Direct DVF Query", False, f"Exception: {str(e)}")
+            return False
+
+    def run_urgent_tests(self):
+        """Run focused tests for the urgent issue"""
+        print("🚨 URGENT ISSUE INVESTIGATION 🚨")
+        print("Issue: /api/estimate returns 0 comparables despite 5000 transactions")
+        print(f"📍 Base URL: {API_BASE}")
+        print(f"⏰ Started at: {datetime.now().isoformat()}")
+        print("=" * 80)
+        
+        # Step 1: Check database status
+        db_ok = self.test_database_dvf_status()
+        
+        # Step 2: Test direct DVF query
+        dvf_ok = self.test_direct_dvf_query()
+        
+        # Step 3: Test the main estimate endpoint (user's exact issue)
+        estimate_ok = self.test_urgent_estimate_issue()
+        
+        # Summary
+        print("\n" + "=" * 80)
+        print("🔍 URGENT ISSUE INVESTIGATION SUMMARY")
+        print("=" * 80)
+        
+        print(f"1. Database Status: {'✅ OK' if db_ok else '❌ ISSUE'}")
+        print(f"2. Direct DVF Query: {'✅ OK' if dvf_ok else '❌ ISSUE'}")
+        print(f"3. /api/estimate Endpoint: {'✅ FIXED' if estimate_ok else '❌ BROKEN'}")
+        
+        if not estimate_ok:
+            print("\n🚨 CRITICAL FINDINGS:")
+            if not db_ok:
+                print("  - No DVF data in database - need to ingest data first")
+            elif not dvf_ok:
+                print("  - DVF query logic has issues - check query parameters/filters")
+            else:
+                print("  - Issue specific to /api/estimate endpoint - check implementation")
+        else:
+            print("\n✅ ISSUE RESOLVED: /api/estimate is now working correctly")
+        
+        return estimate_ok
+
     def run_all_tests(self):
-        """Run all API tests"""
-        print(f"🚀 Starting AlterEgo API Tests")
+        """Run all API tests - MODIFIED to focus on urgent issue first"""
+        # First run urgent tests
+        urgent_resolved = self.run_urgent_tests()
+        
+        if not urgent_resolved:
+            print("\n⚠️ STOPPING: Urgent issue not resolved. Fix before running full test suite.")
+            return
+        
+        print(f"\n🚀 Starting Full AlterEgo API Tests")
         print(f"📍 Base URL: {API_BASE}")
         print(f"⏰ Started at: {datetime.now().isoformat()}")
         print("=" * 60)
