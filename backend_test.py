@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AlterEgo API Backend Testing Suite
-Tests all API endpoints for the real estate estimation app
+AlterEgo API Backend Testing Suite - URGENT ISSUE FOCUS
+Testing /api/estimate endpoint returning 0 comparables despite 5000 transactions in MongoDB
 """
 
 import requests
@@ -18,7 +18,17 @@ API_BASE = f"{BASE_URL}/api"
 ADMIN_USERNAME = "Micael"
 ADMIN_PASSWORD = "Micael123"
 
-# Test data
+# URGENT: User reported issue - exact test case
+URGENT_TEST_PAYLOAD = {
+    "address": "15 Avenue des Champs-Élysées, 75008 Paris",
+    "lat": 48.8698,
+    "lng": 2.3085,
+    "type": "appartement",
+    "surface": 80,
+    "characteristics": {"floor": "1-3", "standing": 4}
+}
+
+# Additional test data
 TEST_ADDRESS = "2 rue des italiens, 75009 Paris"
 TEST_LAT = 48.8712
 TEST_LNG = 2.3378
