@@ -42,12 +42,47 @@ Application web d'estimation immobilière basée sur les données DVF (Demandes 
 
 ## 🚀 Installation & Déploiement
 
-### Prérequis
+### 📦 Déploiement Production (Dokploy)
+
+**Consultez le guide complet :** [GUIDE_DEPLOIEMENT_PRODUCTION.md](./GUIDE_DEPLOIEMENT_PRODUCTION.md)
+
+#### Configuration Rapide
+
+1. **Variables d'environnement Dokploy :**
+```bash
+AUTO_LOAD_DVF=true
+DVF_LOAD_MODE=complete
+MONGO_URL=mongodb://mongodb:27017/alterego_db
+DB_NAME=alterego_db
+NEXT_PUBLIC_BASE_URL=https://app.alteregopatrimoine.com
+ADMIN_USERNAME=Micael
+ADMIN_PASSWORD=Micael123
+JWT_SECRET=votre-secret-key
+CORS_ORIGINS=*
+```
+
+2. **Déployez depuis GitHub**
+   - Le conteneur chargera automatiquement ~900k transactions DVF
+   - Premier démarrage : 15-30 minutes
+   - Données toujours à jour à chaque redéploiement
+
+#### Modes de Chargement DVF
+
+| Mode | Variable | Transactions | Temps | Usage |
+|------|----------|--------------|-------|-------|
+| **Complet** | `DVF_LOAD_MODE=complete` | ~900 000+ | 15-30 min | Production ⭐ |
+| **Rapide** | `DVF_LOAD_MODE=quick` | 10 000 | 10 sec | Dev/Test |
+
+---
+
+### 🛠️ Installation Locale
+
+#### Prérequis
 - Node.js 18+
 - MongoDB 6+
 - Yarn
 
-### Installation des dépendances
+#### Installation des dépendances
 ```bash
 cd /app
 yarn install
