@@ -14,8 +14,8 @@ async function checkDVFData() {
     await connectToDatabase();
     console.log('✅ Connexion à MongoDB réussie\n');
 
-    // Récupérer la collection dvf_data
-    const collection = await getCollection('dvf_data');
+    // Récupérer la collection dvf_sales
+    const collection = await getCollection('dvf_sales');
 
     // Compter le nombre total de transactions
     const totalCount = await collection.countDocuments({});
