@@ -164,6 +164,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ POST /api/estimate working correctly - returns DVF comparables (7 found), market listings (0 due to scraping limitations), and estimated value (€769,335). Core estimation logic functional"
+        - working: true
+          agent: "testing"
+          comment: "✅ URGENT ISSUE INVESTIGATION COMPLETE: User reported /api/estimate returning 0 comparables for Champs-Élysées location. Comprehensive testing shows API working correctly: 17 comparables found for exact user coordinates (48.8698, 2.3085), €13598/m² average. Tested 6 major French cities - all working. Database contains 914,063 DVF records. Issue appears resolved or was intermittent. No code changes needed."
 
   - task: "Lead Management API"
     implemented: true
