@@ -80,21 +80,17 @@ if [ "$AUTO_LOAD_DVF" = "true" ]; then
     echo "🚀 Lancement du chargement automatique des données DVF..."
     echo ""
     
-    # Déterminer quels départements charger
-    if [ -n "$DVF_DEPARTMENTS" ]; then
-        echo "📍 Chargement des départements : $DVF_DEPARTMENTS"
-        node scripts/populate-dvf-sample.js --dept="$DVF_DEPARTMENTS" &
+    echo "📍 Chargement des données DVF embarquées (10,000 transactions Paris)"
+    echo "   Fichier source : /app/data/dvf_paris_10k.json"
+    echo ""
+    
+    # Charger les données embarquées
+    node /app/scripts/load-embedded-dvf.js
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Données DVF chargées avec succès"
     else
-        echo "📍 Chargement de toute la France (cela peut prendre 2-4 heures)"
-        echo "   Vous pouvez suivre la progression dans les logs de l'application"
-        echo ""
-        
-        # Lancer en arrière-plan pour ne pas bloquer le démarrage de l'app
-        nohup node scripts/ingest-all-france.js > /tmp/dvf-ingestion.log 2>&1 &
-        
-        echo "✅ Ingestion lancée en arrière-plan (PID: $!)"
-        echo "   Logs disponibles : /tmp/dvf-ingestion.log"
-        echo "   Commande pour suivre : docker logs -f <container_name>"
+        echo "⚠️  Échec du chargement - l'application démarrera sans données DVF"
     fi
 else
     echo "ℹ️  AUTO_LOAD_DVF n'est pas activé"
