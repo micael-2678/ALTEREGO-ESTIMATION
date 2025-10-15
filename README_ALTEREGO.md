@@ -95,7 +95,7 @@ DB_NAME=alterego_db
 JWT_SECRET=alterego-secret-key-2025
 ADMIN_USERNAME=Micael
 ADMIN_PASSWORD=Micael123
-NEXT_PUBLIC_BASE_URL=https://estate-data-fix.preview.emergentagent.com
+NEXT_PUBLIC_BASE_URL=https://dvf-connector.preview.emergentagent.com
 ```
 
 ### Peupler les données DVF (sample)
@@ -143,7 +143,7 @@ const records = parse(csvContent, { columns: true });
 ## 🔐 Authentification Admin
 
 ### Connexion
-- URL : https://estate-data-fix.preview.emergentagent.com/admin
+- URL : https://dvf-connector.preview.emergentagent.com/admin
 - Identifiant : **Micael**
 - Mot de passe : **Micael123**
 
