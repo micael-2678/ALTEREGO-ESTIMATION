@@ -3,161 +3,87 @@
 import { useState, useEffect } from 'react';
 
 export default function DVFAdminPage() {
-  const [stats, setStats] = useState(null);
-  const [ingestionState, setIngestionState] = useState(null);
+  const [stats, setStats] = useState({ total: 0, byType: {} });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [message, setMessage] = useState('');
 
-  // Vérifier l'authentification
   useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    if (!token) {
+    // Vérifier auth
+    if (!localStorage.getItem('adminToken')) {
       window.location.href = '/admin';
-    } else {
-      setIsAuthenticated(true);
+      return;
     }
+    loadStats();
   }, []);
 
-  // Récupérer les statistiques
-  const fetchStats = async () => {
+  const loadStats = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      if (!token) {
-        window.location.href = '/admin';
-        return;
-      }
-
       const res = await fetch('/api/admin/dvf/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-
-      if (res.status === 401) {
-        router.push('/admin');
-        return;
-      }
-
-      const data = await res.json();
-      setStats(data);
-    } catch (err) {
-      console.error('Error fetching stats:', err);
-    }
-  };
-
-  // Récupérer l'état de l'ingestion
-  const fetchIngestionState = async () => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) return;
-
-      const res = await fetch('/api/admin/dvf/status', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (res.status === 401) {
-        window.location.href = '/admin';
-        return;
-      }
-
       if (res.ok) {
         const data = await res.json();
-        setIngestionState(data);
+        setStats(data);
       }
     } catch (err) {
-      console.error('Error fetching ingestion state:', err);
+      console.error(err);
     }
   };
 
-  // Démarrer l'ingestion
   const startIngestion = async () => {
+    if (!confirm('Charger ~900 000 transactions DVF depuis data.gouv.fr ?\n\nCela prendra 15-30 minutes.')) {
+      return;
+    }
+    
     setLoading(true);
-    setError(null);
+    setMessage('Chargement en cours... (15-30 min)');
 
     try {
       const token = localStorage.getItem('adminToken');
       const res = await fetch('/api/admin/dvf/start', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        setMessage('✅ Ingestion démarrée ! Rechargez la page dans 20 minutes pour voir les résultats.');
+      } else {
         const data = await res.json();
-        throw new Error(data.error || 'Erreur lors du démarrage');
+        setMessage('❌ Erreur: ' + (data.error || 'Échec'));
       }
-
-      const data = await res.json();
-      setIngestionState(data.state);
     } catch (err) {
-      setError(err.message);
+      setMessage('❌ Erreur: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Vider la base
   const clearData = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les données DVF ? Cette action est irréversible.')) {
+    if (!confirm('Supprimer TOUTES les données DVF ?\n\nCette action est irréversible !')) {
       return;
     }
 
     setLoading(true);
-    setError(null);
-
     try {
       const token = localStorage.getItem('adminToken');
       const res = await fetch('/api/admin/dvf/clear', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) {
-        throw new Error('Erreur lors de la suppression');
+      if (res.ok) {
+        setMessage('✅ Base vidée avec succès');
+        await loadStats();
+      } else {
+        setMessage('❌ Erreur lors de la suppression');
       }
-
-      await fetchStats();
     } catch (err) {
-      setError(err.message);
+      setMessage('❌ Erreur: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
-
-  // Charger les données initiales
-  useEffect(() => {
-    fetchStats();
-    fetchIngestionState();
-  }, []);
-
-  // Polling pour la progression
-  useEffect(() => {
-    if (ingestionState?.isRunning) {
-      const interval = setInterval(() => {
-        fetchIngestionState();
-        fetchStats();
-      }, 3000); // Mise à jour toutes les 3 secondes
-
-      return () => clearInterval(interval);
-    }
-  }, [ingestionState?.isRunning]);
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Vérification de l'authentification...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
