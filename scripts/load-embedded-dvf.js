@@ -32,8 +32,8 @@ async function loadEmbeddedDVF() {
       process.exit(0);
     }
 
-    // Charger le fichier JSON embarqué
-    const dataPath = join(__dirname, '..', 'data', 'dvf_paris_10k.json');
+    // Charger le fichier JSON embarqué (50k transactions France entière)
+    const dataPath = join(__dirname, '..', 'data', 'dvf_france_50k.json');
     console.log(`\n📂 Lecture du fichier : ${dataPath}`);
     
     const rawData = readFileSync(dataPath, 'utf-8');
