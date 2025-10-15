@@ -86,17 +86,33 @@ curl -X POST https://app.alteregopatrimoine.com/api/estimate \
 
 ---
 
-### 4. Charger les Données DVF (si nécessaire)
+### 4. ⚠️ CRITIQUE : Charger les Données DVF en Production
 
-**Via le terminal Dokploy :**
+**C'EST L'ÉTAPE LA PLUS IMPORTANTE !** Sans données DVF, les estimations ne fonctionneront pas.
+
+**Via le terminal Dokploy (Application) :**
 
 ```bash
-# Vérifier si les données sont présentes
+# 1. Vérifier si les données sont présentes
 node scripts/check-dvf-data.js
 
-# Si vide, charger toute la France (recommandé)
+# 2. Si vide (0 documents), charger toute la France
 node scripts/ingest-all-france.js
+# ⏱️ Durée : 2-4 heures
+
+# OU charger uniquement les départements principaux (test rapide)
+node scripts/populate-dvf-sample.js --dept=75,77,78,91,92,93,94,95
+# ⏱️ Durée : 15-30 minutes
 ```
+
+**Alternative : Export/Import depuis local**
+```bash
+# Sur votre machine locale
+bash scripts/export-dvf-production.sh
+# Suivez les instructions affichées
+```
+
+**📚 Guide détaillé :** Voir `SOLUTION_MONGODB_PRODUCTION.md`
 
 ---
 
