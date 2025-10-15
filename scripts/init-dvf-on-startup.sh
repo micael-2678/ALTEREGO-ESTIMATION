@@ -80,8 +80,8 @@ if [ "$AUTO_LOAD_DVF" = "true" ]; then
     echo "🚀 Lancement du chargement automatique des données DVF..."
     echo ""
     
-    echo "📍 Chargement des données DVF embarquées (10,000 transactions Paris)"
-    echo "   Fichier source : /app/data/dvf_paris_10k.json"
+    echo "📍 Chargement des données DVF embarquées (50,000 transactions France entière)"
+    echo "   Fichier source : /app/data/dvf_france_50k.json"
     echo ""
     
     # Charger les données embarquées
