@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Next.js MongoDB Template',
-  description: 'A simple template with App Router, MongoDB, and shadcn/ui',
+  title: 'AlterEgo - Estimation Immobilière Gratuite',
+  description: 'Estimez votre bien immobilier gratuitement en 3 minutes. Estimation basée sur les données DVF du marché actuel.',
 }
 
 export default function RootLayout({ children }) {
