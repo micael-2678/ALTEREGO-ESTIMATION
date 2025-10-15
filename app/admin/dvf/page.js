@@ -1,26 +1,34 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Database, Download, Trash2, RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 export default function DVFAdminPage() {
-  const router = useRouter();
   const [stats, setStats] = useState(null);
   const [ingestionState, setIngestionState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Vérifier l'authentification
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+      window.location.href = '/admin';
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   // Récupérer les statistiques
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        router.push('/admin');
+        window.location.href = '/admin';
         return;
       }
 
