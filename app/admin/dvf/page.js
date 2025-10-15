@@ -8,7 +8,6 @@ export default function DVFAdminPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    // Vérifier auth
     if (!localStorage.getItem('adminToken')) {
       window.location.href = '/admin';
       return;
@@ -37,7 +36,7 @@ export default function DVFAdminPage() {
     }
     
     setLoading(true);
-    setMessage('Chargement en cours... (15-30 min)');
+    setMessage('⏳ Chargement en cours... (15-30 min)');
 
     try {
       const token = localStorage.getItem('adminToken');
@@ -65,6 +64,8 @@ export default function DVFAdminPage() {
     }
 
     setLoading(true);
+    setMessage('⏳ Suppression en cours...');
+    
     try {
       const token = localStorage.getItem('adminToken');
       const res = await fetch('/api/admin/dvf/clear', {
@@ -88,6 +89,7 @@ export default function DVFAdminPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f9fafb', padding: '2rem' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        
         {/* Header */}
         <div style={{ marginBottom: '2rem' }}>
           <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
@@ -96,6 +98,19 @@ export default function DVFAdminPage() {
           <p style={{ color: '#6b7280' }}>
             Chargement automatique depuis l'API officielle data.gouv.fr
           </p>
+          <button 
+            onClick={() => window.location.href = '/admin'}
+            style={{
+              marginTop: '1rem',
+              padding: '0.5rem 1rem',
+              background: '#e5e7eb',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            ← Retour Admin
+          </button>
         </div>
 
         {/* Message */}
@@ -105,7 +120,8 @@ export default function DVFAdminPage() {
             border: `1px solid ${message.includes('❌') ? '#fca5a5' : '#86efac'}`,
             borderRadius: '8px',
             padding: '1rem',
-            marginBottom: '1.5rem'
+            marginBottom: '1.5rem',
+            fontSize: '1rem'
           }}>
             {message}
           </div>
@@ -120,163 +136,100 @@ export default function DVFAdminPage() {
         }}>
           <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>Total Transactions</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#111827' }}>
               {stats.total.toLocaleString()}
             </div>
           </div>
 
           <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>Appartements</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#111827' }}>
               {(stats.byType?.appartement || 0).toLocaleString()}
             </div>
           </div>
 
           <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>Maisons</div>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#111827' }}>
               {(stats.byType?.maison || 0).toLocaleString()}
             </div>
           </div>
         </div>
 
-        {/* Progression de l'ingestion */}
-        {ingestionState?.isRunning && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Ingestion en cours</CardTitle>
-              <CardDescription>
-                Téléchargement des données depuis l'API officielle data.gouv.fr
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Progression</span>
-                    <span className="font-medium">{ingestionState.progress}%</span>
-                  </div>
-                  <Progress value={ingestionState.progress} className="h-2" />
-                </div>
-
-                {ingestionState.currentDepartment && (
-                  <div className="text-sm text-gray-600">
-                    📍 Département en cours : <span className="font-medium">{ingestionState.currentDepartment}</span>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Terminés</span>
-                    <div className="font-medium text-green-600">{ingestionState.completed} / {ingestionState.totalDepartments}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Échecs</span>
-                    <div className="font-medium text-red-600">{ingestionState.failed}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Démarré</span>
-                    <div className="font-medium">{new Date(ingestionState.startTime).toLocaleTimeString('fr-FR')}</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Actions */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Actions</CardTitle>
-            <CardDescription>
-              Gérer le chargement et la suppression des données DVF
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex gap-4">
-            <Button
+        <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Actions</h2>
+          
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
               onClick={startIngestion}
-              disabled={loading || ingestionState?.isRunning}
-              className="flex items-center gap-2"
-            >
-              {ingestionState?.isRunning ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              {ingestionState?.isRunning ? 'Ingestion en cours...' : 'Charger les Données DVF'}
-            </Button>
-
-            <Button
-              onClick={fetchStats}
-              variant="outline"
               disabled={loading}
-              className="flex items-center gap-2"
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: loading ? '#9ca3af' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.5 : 1
+              }}
             >
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </Button>
+              {loading ? '⏳ Chargement...' : '📥 Charger les Données DVF'}
+            </button>
 
-            <Button
+            <button
+              onClick={loadStats}
+              disabled={loading}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: 'white',
+                color: '#374151',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.5 : 1
+              }}
+            >
+              🔄 Rafraîchir
+            </button>
+
+            <button
               onClick={clearData}
-              variant="destructive"
-              disabled={loading || ingestionState?.isRunning || !stats || stats.total === 0}
-              className="flex items-center gap-2"
+              disabled={loading || stats.total === 0}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: (loading || stats.total === 0) ? '#fca5a5' : '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: (loading || stats.total === 0) ? 'not-allowed' : 'pointer',
+                opacity: (loading || stats.total === 0) ? 0.5 : 1
+              }}
             >
-              <Trash2 className="h-4 w-4" />
-              Vider la Base
-            </Button>
-          </CardContent>
-        </Card>
+              🗑️ Vider la Base
+            </button>
+          </div>
+        </div>
 
-        {/* Logs récents */}
-        {ingestionState?.logs && ingestionState.logs.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Logs récents</CardTitle>
-              <CardDescription>Dernières activités d'ingestion</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {ingestionState.logs.slice().reverse().map((log, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-2 p-2 rounded bg-gray-50 text-sm"
-                  >
-                    {log.type === 'success' && <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />}
-                    {log.type === 'error' && <XCircle className="h-4 w-4 text-red-600 mt-0.5" />}
-                    {log.type === 'info' && <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5" />}
-                    <div className="flex-1">
-                      <div className="font-medium">{log.message}</div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(log.timestamp).toLocaleString('fr-FR')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Info */}
+        <div style={{ background: '#eff6ff', borderRadius: '8px', padding: '1.5rem', border: '1px solid #bfdbfe' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem', color: '#1e40af' }}>
+            ℹ️ Informations
+          </h3>
+          <ul style={{ marginLeft: '1.5rem', color: '#1e3a8a', lineHeight: '1.6' }}>
+            <li>Le chargement télécharge ~900 000 transactions depuis data.gouv.fr</li>
+            <li>Durée estimée : 15-30 minutes</li>
+            <li>Les données sont mises à jour automatiquement (5 dernières années)</li>
+            <li>Une fois chargées, les estimations fonctionneront immédiatement</li>
+          </ul>
+        </div>
 
-        {/* Top départements */}
-        {stats && stats.byDepartment && stats.byDepartment.length > 0 && (
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle>Top 10 Départements</CardTitle>
-              <CardDescription>Départements avec le plus de transactions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {stats.byDepartment.map((dept) => (
-                  <div key={dept.code} className="flex items-center justify-between p-2 rounded bg-gray-50">
-                    <span className="font-medium">Département {dept.code}</span>
-                    <span className="text-gray-600">{dept.count.toLocaleString()} transactions</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
