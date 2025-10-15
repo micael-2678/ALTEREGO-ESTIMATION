@@ -530,6 +530,62 @@ export async function POST(request) {
       );
     }
 
+    // DVF Admin: Start ingestion
+    if (pathname === '/api/admin/dvf/start') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        const result = await startDVFIngestion();
+        return NextResponse.json(result, { headers: corsHeaders });
+      } catch (error) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
+    // DVF Admin: Clear data
+    if (pathname === '/api/admin/dvf/clear') {
+      const authHeader = request.headers.get('authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      try {
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      
+      const result = await clearDVFData();
+      
+      return NextResponse.json(result, { headers: corsHeaders });
+    }
+
     return NextResponse.json(
       { error: 'Not found' },
       { status: 404, headers: corsHeaders }
