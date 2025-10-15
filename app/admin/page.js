@@ -365,6 +365,14 @@ export default function AdminPage() {
               <Badge variant="outline" className="text-sm">{filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}</Badge>
             </div>
             <div className="flex items-center gap-4">
+              <Button 
+                onClick={() => window.location.href = '/admin/dvf'} 
+                variant="outline" 
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                📊 Données DVF
+              </Button>
               <span className="text-sm text-gray-600">Connecté: <strong>{username}</strong></span>
               <Button onClick={handleLogout} variant="outline" size="sm">
                 Déconnexion
