@@ -1,10 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Database, Download, Trash2, RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 export default function DVFAdminPage() {
   const [stats, setStats] = useState(null);
