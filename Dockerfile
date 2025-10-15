@@ -47,11 +47,23 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copier les scripts d'ingestion DVF et d'initialisation
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
+COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./
+
+# Rendre les scripts exécutables
+USER root
+RUN chmod +x /app/docker-entrypoint.sh /app/scripts/*.sh
+
 # Changer vers l'utilisateur non-root
 USER nextjs
 
 # Exposer le port 3000
 EXPOSE 3000
+
+# Utiliser l'entrypoint personnalisé
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Démarrer l'application standalone
 CMD ["node", "server.js"]
