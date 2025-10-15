@@ -57,6 +57,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./
 USER root
 RUN chmod +x /app/docker-entrypoint.sh /app/scripts/*.sh
 
+RUN apk add --no-cache chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Changer vers l'utilisateur non-root
 USER nextjs
 
