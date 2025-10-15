@@ -19,11 +19,10 @@ J'ai créé un système de **chargement automatique** qui télécharge toutes le
 
 Allez dans **Dokploy > Votre Projet AlterEgo > Settings > Environment Variables**
 
-Ajoutez ces 2 variables :
+Ajoutez cette variable :
 
 ```bash
 AUTO_LOAD_DVF=true
-DVF_LOAD_MODE=complete
 ```
 
 Gardez également vos variables existantes :
