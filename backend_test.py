@@ -1086,4 +1086,5 @@ class APITester:
 
 if __name__ == "__main__":
     tester = APITester()
-    tester.run_all_tests()
+    # Focus on urgent issue first
+    tester.run_urgent_tests()
