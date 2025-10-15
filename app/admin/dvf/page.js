@@ -89,18 +89,25 @@ export default function DVFAdminPage() {
     <div style={{ minHeight: '100vh', background: '#f9fafb', padding: '2rem' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Gestion des Données DVF</h1>
-          <p className="text-gray-600">
-            Administration des données immobilières (Demandes de Valeurs Foncières)
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+            📊 Gestion des Données DVF
+          </h1>
+          <p style={{ color: '#6b7280' }}>
+            Chargement automatique depuis l'API officielle data.gouv.fr
           </p>
         </div>
 
-        {/* Erreur */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-            <div className="text-red-800">{error}</div>
+        {/* Message */}
+        {message && (
+          <div style={{ 
+            background: message.includes('❌') ? '#fee2e2' : '#d1fae5', 
+            border: `1px solid ${message.includes('❌') ? '#fca5a5' : '#86efac'}`,
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            {message}
           </div>
         )}
 
