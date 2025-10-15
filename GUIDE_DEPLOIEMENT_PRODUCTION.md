@@ -35,15 +35,12 @@ DVF_LOAD_MODE=complete
 
 ---
 
-## 🎯 Options de Chargement DVF
+## 🎯 Chargement Automatique DVF
 
-Vous avez **2 modes** de chargement des données DVF :
-
-### 1️⃣ Mode COMPLET (Recommandé pour Production) ⭐
+Le système charge automatiquement toutes les données DVF depuis l'API officielle data.gouv.fr :
 
 ```bash
 AUTO_LOAD_DVF=true
-DVF_LOAD_MODE=complete
 ```
 
 **Caractéristiques :**
@@ -52,32 +49,12 @@ DVF_LOAD_MODE=complete
 - ✅ Couverture complète : ~900 000+ transactions (toute la France)
 - ✅ Mise à jour automatique à chaque redéploiement
 - ⏱️ Temps de chargement : **15-30 minutes** au premier démarrage
-- 📊 Départements : Métropole + DOM-TOM
+- 📊 Départements : Métropole + DOM-TOM (101 départements)
 
 **Idéal pour :**
 - Production professionnelle
 - Application en conditions réelles
 - Estimations précises sur toute la France
-
----
-
-### 2️⃣ Mode RAPIDE (Développement/Test)
-
-```bash
-AUTO_LOAD_DVF=true
-DVF_LOAD_MODE=quick
-```
-
-**Caractéristiques :**
-- ⚡ Chargement ultra-rapide (~10 secondes)
-- 📊 10 000 transactions réelles pré-chargées
-- ✅ Couverture France entière (échantillon)
-- 💾 Données embarquées dans l'image Docker
-
-**Idéal pour :**
-- Tests rapides
-- Environnements de développement
-- Démos
 
 ---
 
