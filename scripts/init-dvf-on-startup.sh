@@ -80,33 +80,58 @@ if [ "$AUTO_LOAD_DVF" = "true" ]; then
     echo "🚀 Lancement du chargement automatique des données DVF..."
     echo ""
     
-    echo "📍 Chargement des données DVF embarquées (10,000 VRAIES transactions)"
-    echo "   Fichier source : /app/data/dvf_real_10k.json (extraites du preview)"
-    echo ""
+    # Option 1: Chargement rapide avec données embarquées (par défaut si DVF_LOAD_MODE=quick)
+    if [ "$DVF_LOAD_MODE" = "quick" ]; then
+        echo "⚡ MODE RAPIDE : Chargement des données DVF embarquées"
+        echo "   📊 10,000 transactions réelles (toute France)"
+        echo "   ⏱️  Temps de chargement : ~10 secondes"
+        echo ""
+        
+        node /app/scripts/load-embedded-dvf.js
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ Données DVF chargées avec succès (mode rapide)"
+        else
+            echo "⚠️  Échec du chargement - l'application démarrera sans données DVF"
+        fi
     
-    # Charger les données embarquées
-    node /app/scripts/load-embedded-dvf.js
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Données DVF chargées avec succès"
+    # Option 2: Chargement complet depuis l'API officielle DVF (recommandé pour production)
     else
-        echo "⚠️  Échec du chargement - l'application démarrera sans données DVF"
+        echo "🌐 MODE COMPLET : Ingestion depuis l'API DVF officielle"
+        echo "   📊 Toutes les transactions France (5 dernières années)"
+        echo "   ⏱️  Temps estimé : 15-30 minutes"
+        echo "   📡 Source : files.data.gouv.fr/geo-dvf"
+        echo ""
+        echo "⚠️  IMPORTANT : Le conteneur va mettre du temps à démarrer"
+        echo "   mais les données seront toujours à jour !"
+        echo ""
+        
+        # Lancer l'ingestion complète en arrière-plan avec logs
+        node /app/scripts/ingest-all-france.js > /tmp/dvf-ingestion.log 2>&1
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ Ingestion complète réussie"
+            echo "📊 Consultez /tmp/dvf-ingestion.log pour les détails"
+        else
+            echo "⚠️  L'ingestion a rencontré des erreurs"
+            echo "📊 Consultez /tmp/dvf-ingestion.log pour les détails"
+            echo "ℹ️  L'application démarrera avec les données chargées (potentiellement partielles)"
+        fi
     fi
 else
     echo "ℹ️  AUTO_LOAD_DVF n'est pas activé"
     echo ""
-    echo "Pour activer le chargement automatique, ajoutez cette variable"
+    echo "Pour activer le chargement automatique, ajoutez ces variables"
     echo "d'environnement dans Dokploy :"
     echo ""
     echo "   AUTO_LOAD_DVF=true"
-    echo ""
-    echo "Options de départements (optionnel) :"
-    echo "   DVF_DEPARTMENTS=75              (Paris uniquement - rapide)"
-    echo "   DVF_DEPARTMENTS=75,77,78,91,92,93,94,95  (Île-de-France)"
-    echo "   (laisser vide pour toute la France)"
+    echo "   DVF_LOAD_MODE=complete    (ingestion complète depuis API officielle)"
+    echo "   OU"
+    echo "   DVF_LOAD_MODE=quick       (chargement rapide 10k transactions)"
     echo ""
     echo "📝 Pour charger manuellement, connectez-vous au terminal et exécutez :"
-    echo "   node scripts/ingest-all-france.js"
+    echo "   node scripts/ingest-all-france.js  (complet)"
+    echo "   node scripts/load-embedded-dvf.js  (rapide)"
     echo ""
 fi
 
