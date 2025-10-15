@@ -2,16 +2,21 @@
 
 /**
  * Script pour vérifier la présence et la quantité de données DVF dans MongoDB
+ * Usage: node scripts/check-dvf-data.js
+ * En production Dokploy, les variables d'environnement sont déjà chargées
  */
 
-import dotenv from 'dotenv';
 import { connectToDatabase, getCollection } from '../lib/mongodb.js';
-
-// Charger les variables d'environnement
-dotenv.config();
 
 async function checkDVFData() {
   console.log('🔍 Vérification des données DVF...\n');
+  
+  // Vérifier que MONGO_URL est défini
+  if (!process.env.MONGO_URL) {
+    console.log('⚠️  MONGO_URL non défini dans les variables d\'environnement');
+    console.log('ℹ️  En production Dokploy, ce script utilisera automatiquement MONGO_URL');
+    process.exit(1);
+  }
 
   try {
     // Connexion à MongoDB
