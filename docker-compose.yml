@@ -10,36 +10,27 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - MONGO_URL=mongodb://mongodb:27017/alterego_db
+      - MONGO_URL=${MONGO_URL:-mongodb://mongodb:27017/alterego_db}
+      - DB_NAME=${DB_NAME:-alterego_db}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-Micael}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Micael123}
-    depends_on:
-      - mongodb
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     restart: unless-stopped
     networks:
-      - alterego-network
-
-  # Base de données MongoDB
-  mongodb:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb-data:/data/db
-      - mongodb-config:/data/configdb
-    restart: unless-stopped
-    networks:
-      - alterego-network
-    command: mongod --quiet --logpath /dev/null
-
-volumes:
-  mongodb-data:
-    driver: local
-  mongodb-config:
-    driver: local
+      - dokploy-network
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.alterego.rule=Host(`app.alteregopatrimoine.com`)"
+        - "traefik.http.routers.alterego.entrypoints=web,websecure"
+        - "traefik.http.routers.alterego.tls.certresolver=letsencrypt"
+        - "traefik.http.services.alterego.loadbalancer.server.port=3000"
+        - "traefik.docker.network=dokploy-network"
 
 networks:
-  alterego-network:
-    driver: bridge
+  dokploy-network:
+    external: true
