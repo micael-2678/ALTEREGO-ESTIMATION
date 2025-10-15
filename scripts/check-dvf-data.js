@@ -4,7 +4,11 @@
  * Script pour vérifier la présence et la quantité de données DVF dans MongoDB
  */
 
+import dotenv from 'dotenv';
 import { connectToDatabase, getCollection } from '../lib/mongodb.js';
+
+// Charger les variables d'environnement
+dotenv.config();
 
 async function checkDVFData() {
   console.log('🔍 Vérification des données DVF...\n');
