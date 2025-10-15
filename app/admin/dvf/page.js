@@ -18,7 +18,7 @@ export default function DVFAdminPage() {
   const loadStats = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch('/api/admin/dvf/stats', {
+      const res = await fetch('/api/admin/dvf?action=stats', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -40,7 +40,7 @@ export default function DVFAdminPage() {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch('/api/admin/dvf/start', {
+      const res = await fetch('/api/admin/dvf?action=start', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -68,7 +68,7 @@ export default function DVFAdminPage() {
     
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch('/api/admin/dvf/clear', {
+      const res = await fetch('/api/admin/dvf?action=clear', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
