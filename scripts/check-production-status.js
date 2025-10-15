@@ -5,6 +5,29 @@
  * Usage: node scripts/check-production-status.js
  */
 
+// Charger les variables d'environnement depuis .env si présent
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const envPath = join(__dirname, '..', '.env');
+
+if (existsSync(envPath)) {
+  const envFile = readFileSync(envPath, 'utf-8');
+  envFile.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key && valueParts.length > 0) {
+        const value = valueParts.join('=');
+        process.env[key.trim()] = value.trim();
+      }
+    }
+  });
+}
+
 import { connectToDatabase, getCollection } from '../lib/mongodb.js';
 
 const COLORS = {
