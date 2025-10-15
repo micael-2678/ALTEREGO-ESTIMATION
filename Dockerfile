@@ -50,6 +50,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copier les scripts d'ingestion DVF et d'initialisation
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./
 
 # Rendre les scripts exécutables
