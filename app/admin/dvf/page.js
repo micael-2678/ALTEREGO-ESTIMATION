@@ -62,6 +62,11 @@ export default function DVFAdminPage() {
         }
       });
 
+      if (res.status === 401) {
+        window.location.href = '/admin';
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         setIngestionState(data);
