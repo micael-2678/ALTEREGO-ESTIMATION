@@ -165,10 +165,10 @@ export default function DVFAdminPage() {
 
         {/* Erreur */}
         {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div className="text-red-800">{error}</div>
+          </div>
         )}
 
         {/* Statistiques */}
