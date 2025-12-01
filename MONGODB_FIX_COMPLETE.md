@@ -45,7 +45,7 @@ Dans **Dokploy → Votre Application → Environment Variables**, ajoutez ou mod
 ```env
 MONGO_URL=mongodb://mongo:ungjjv3llz1dqst0@alterego-estimation-mongodbalterego-w4vqu9:27017
 DB_NAME=alterego_db
-NEXT_PUBLIC_BASE_URL=https://dvf-connector.preview.emergentagent.com
+NEXT_PUBLIC_BASE_URL=https://google-ads-setup.preview.emergentagent.com
 CORS_ORIGINS=*
 JWT_SECRET=alterego-secret-key-2025
 ADMIN_USERNAME=Micael
@@ -67,7 +67,7 @@ Une fois déployé, testez avec:
 
 **Option A - Page de test visuelle:**
 ```
-https://dvf-connector.preview.emergentagent.com/test-mongo
+https://google-ads-setup.preview.emergentagent.com/test-mongo
 ```
 Cliquez sur "Tester la connexion" et vérifiez:
 - ✅ Connexion réussie
@@ -76,7 +76,7 @@ Cliquez sur "Tester la connexion" et vérifiez:
 
 **Option B - API directe:**
 ```bash
-curl https://dvf-connector.preview.emergentagent.com/api/test-mongo
+curl https://google-ads-setup.preview.emergentagent.com/api/test-mongo
 ```
 
 ### Étape 4: Tester une estimation réelle

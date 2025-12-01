@@ -34,7 +34,7 @@ Après avoir sauvegardé les variables d'environnement:
 
 **Test A - API de test MongoDB:**
 ```bash
-curl https://dvf-connector.preview.emergentagent.com/api/test-mongo
+curl https://google-ads-setup.preview.emergentagent.com/api/test-mongo
 ```
 
 Devrait retourner:
@@ -49,14 +49,14 @@ Devrait retourner:
 **Test B - Page de test visuelle:**
 Ouvrez dans votre navigateur:
 ```
-https://dvf-connector.preview.emergentagent.com/test-mongo
+https://google-ads-setup.preview.emergentagent.com/test-mongo
 ```
 
 Cliquez sur "Tester la connexion" - devrait afficher ✅ avec ~850,000 documents
 
 **Test C - Estimation réelle:**
 ```bash
-curl -X POST https://dvf-connector.preview.emergentagent.com/api/estimate \
+curl -X POST https://google-ads-setup.preview.emergentagent.com/api/estimate \
   -H "Content-Type: application/json" \
   -d '{"address":"2 Rue des Italiens 75009 Paris","lat":48.871557,"lng":2.335948,"type":"appartement","surface":50,"characteristics":{}}'
 ```
