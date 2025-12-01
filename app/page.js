@@ -898,6 +898,23 @@ export default function App() {
               </Card>
             )}
 
+            {/* Call to Action - Découvrir AlterEgo */}
+            <Card className="p-8 mb-8 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+              <div className="text-center">
+                <h3 className="text-3xl font-bold mb-4">Besoin d'un accompagnement personnalisé ?</h3>
+                <p className="text-lg text-gray-700 mb-6 max-w-2xl mx-auto">
+                  Découvrez nos services d'expertise immobilière et bénéficiez de l'accompagnement d'un professionnel pour votre projet.
+                </p>
+                <Button
+                  onClick={() => window.open('https://alteregopatrimoine.com', '_blank')}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-12 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                >
+                  Découvrir le site AlterEgo
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              </div>
+            </Card>
+
             {/* Bouton nouvelle estimation */}
             <div className="text-center">
               <Button
