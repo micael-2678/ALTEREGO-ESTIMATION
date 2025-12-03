@@ -34,6 +34,24 @@ export default function RootLayout({ children }) {
             gtag('config', 'AW-17772583118');
           `}
         </Script>
+        
+        {/* Event snippet for Estimation effectuée conversion page */}
+        <Script id="google-ads-conversion" strategy="afterInteractive">
+          {`
+            function gtag_report_conversion(url) {
+              var callback = function () {
+                if (typeof(url) != 'undefined') {
+                  window.location = url;
+                }
+              };
+              gtag('event', 'conversion', {
+                  'send_to': 'AW-17772583118/Qdm9CNLhnssbEM6x0JpC',
+                  'event_callback': callback
+              });
+              return false;
+            }
+          `}
+        </Script>
       </head>
       <body>
         {/* Google Tag Manager (noscript) */}
