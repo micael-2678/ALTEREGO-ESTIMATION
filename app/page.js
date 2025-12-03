@@ -143,6 +143,12 @@ export default function App() {
 
   const handleEstimate = async () => {
     setLoading(true);
+    
+    // Tracker la conversion Google Ads
+    if (typeof window !== 'undefined' && window.gtag_report_conversion) {
+      window.gtag_report_conversion();
+    }
+    
     try {
       // 1. Enregistrer le lead IMMÉDIATEMENT
       await fetch('/api/leads', {
