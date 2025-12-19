@@ -538,10 +538,13 @@ export async function POST(request) {
       // Créer/Mettre à jour le contact dans Brevo si toutes les infos sont présentes
       if (leadData.email && leadData.name && leadData.estimationReason) {
         try {
+          // Normaliser le numéro de téléphone au format E.164 pour Brevo
+          const normalizedPhone = leadData.phone ? normalizePhoneNumber(leadData.phone) : '';
+          
           const brevoResult = await createOrUpdateBrevoContact({
             email: leadData.email,
             name: leadData.name,
-            phone: leadData.phone,
+            phone: normalizedPhone,  // Numéro normalisé (+33...)
             estimationReason: leadData.estimationReason, // "Acheter" ou "Vendre"
             property: leadData.property,
             estimation: leadData.estimation,
