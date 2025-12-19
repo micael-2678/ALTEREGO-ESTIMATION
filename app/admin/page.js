@@ -215,7 +215,7 @@ export default function AdminPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Adresse', 'Type', 'Surface (m²)',
+      'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Raison', 'Adresse', 'Type', 'Surface (m²)',
       'Prix Estimé (€)', 'Prix Conseillé (€)', 'Confiance (%)', 'Statut', 'Commentaires'
     ];
     
@@ -225,6 +225,7 @@ export default function AdminPage() {
       lead.name,
       lead.email,
       lead.phone || '',
+      lead.estimationReason || 'Non spécifié',
       lead.property?.address || '',
       lead.property?.type || '',
       lead.property?.surface || '',
