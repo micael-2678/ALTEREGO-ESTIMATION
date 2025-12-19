@@ -1078,6 +1078,16 @@ export default function App() {
                       <p><strong>Nom :</strong> {leadForm.name}</p>
                       <p><strong>Email :</strong> {leadForm.email}</p>
                       <p><strong>Téléphone :</strong> {leadForm.phone}</p>
+                      <p>
+                        <strong>Raison :</strong>{' '}
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          leadForm.estimationReason === 'Vendre' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {leadForm.estimationReason === 'Vendre' ? '💰 Vendre' : '🏠 Acheter'}
+                        </span>
+                      </p>
                     </div>
 
                     {otpError && (
