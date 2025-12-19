@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [newComment, setNewComment] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterReason, setFilterReason] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState(null);
 
