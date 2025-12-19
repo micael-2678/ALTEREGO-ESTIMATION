@@ -522,6 +522,31 @@ export async function POST(request) {
       const collection = await getCollection('leads');
       await collection.insertOne(lead);
       
+      // Créer/Mettre à jour le contact dans Brevo si toutes les infos sont présentes
+      if (leadData.email && leadData.name && leadData.estimationReason) {
+        try {
+          const brevoResult = await createOrUpdateBrevoContact({
+            email: leadData.email,
+            name: leadData.name,
+            phone: leadData.phone,
+            estimationReason: leadData.estimationReason, // "Acheter" ou "Vendre"
+            property: leadData.property,
+            estimation: leadData.estimation,
+            consent: leadData.consent
+          });
+          
+          if (brevoResult.success) {
+            console.log(`✅ Contact Brevo synchronisé pour ${leadData.email}`);
+          } else {
+            console.error(`⚠️ Échec synchronisation Brevo: ${brevoResult.error}`);
+            // On ne bloque pas la création du lead si Brevo échoue
+          }
+        } catch (error) {
+          console.error('⚠️ Erreur lors de la synchronisation Brevo:', error);
+          // On continue même si Brevo échoue
+        }
+      }
+      
       return NextResponse.json(
         { success: true, leadId: lead.id },
         { headers: corsHeaders }
