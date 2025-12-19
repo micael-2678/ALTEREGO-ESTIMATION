@@ -251,7 +251,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "All backend testing completed successfully"
+    - "SMS OTP Send API"
+    - "SMS OTP Verify API"
+    - "SMS OTP Resend API"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -267,3 +269,5 @@ agent_communication:
       message: "✅ COMPLETE ADMIN LEAD MANAGEMENT TESTING FINISHED: All 3 new admin endpoints (UPDATE, COMMENT, DELETE) tested successfully with 100% pass rate (27/27 tests). Verified: JWT authentication, proper error handling (401/404/400), database operations, comment history tracking, and lead deletion with verification. System ready for production use."
     - agent: "testing"
       message: "🚨 URGENT ISSUE INVESTIGATION COMPLETE: User reported /api/estimate returning 0 comparables despite 5000 transactions in MongoDB. FINDINGS: (1) Database has 914,063 DVF records including 27,690 Paris apartments (2) /api/estimate working correctly - returns 17 comparables for user's exact coordinates (48.8698, 2.3085) with €13598/m² average (3) Tested 6 major French cities - all working correctly (4) Issue appears resolved or was intermittent - no code changes needed. System functioning as expected."
+    - agent: "main"
+      message: "Implemented complete SMS OTP verification system with Brevo integration. Added 3 new endpoints: POST /api/verification/send-otp (sends 6-digit code via SMS), POST /api/verification/verify-otp (validates code), POST /api/verification/resend-otp (resends with cooldown). Features: phone normalization (French to E.164), rate limiting (30s cooldown, max 5 attempts), 5min expiration with MongoDB TTL indexes, automatic bypass for phone 0698793430. Frontend updated with 3-step flow: form → OTP input → verification. Need to test all 3 endpoints including Brevo SMS delivery, bypass functionality, error handling, and rate limiting."
