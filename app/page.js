@@ -849,7 +849,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Étape 6: FORMULAIRE LEAD (AVANT RÉSULTATS) */}
+        {/* Étape 6: FORMULAIRE LEAD AVEC VÉRIFICATION OTP */}
         {step === 6 && (
           <div className="max-w-4xl mx-auto">
             <Button onClick={() => setStep(5)} variant="outline" className="mb-6">← Retour</Button>
@@ -871,62 +871,195 @@ export default function App() {
               </div>
 
               <div className="max-w-md mx-auto space-y-4 mb-6">
-                <div>
-                  <Label className="font-semibold">Nom complet *</Label>
-                  <Input
-                    placeholder="Ex: Jean Dupont"
-                    value={leadForm.name}
-                    onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                    className="mt-2"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="font-semibold">Email *</Label>
-                  <Input
-                    type="email"
-                    placeholder="Ex: jean.dupont@email.com"
-                    value={leadForm.email}
-                    onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
-                    className="mt-2"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="font-semibold">Téléphone *</Label>
-                  <Input
-                    type="tel"
-                    placeholder="Ex: 06 12 34 56 78"
-                    value={leadForm.phone}
-                    onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
-                    className="mt-2"
-                  />
-                </div>
-                
-                <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    checked={leadForm.consent}
-                    onChange={(e) => setLeadForm({ ...leadForm, consent: e.target.checked })}
-                    className="mt-1 w-5 h-5"
-                    id="consent"
-                  />
-                  <label htmlFor="consent" className="text-sm text-gray-700">
-                    J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée et bénéficier d'un accompagnement personnalisé dans mon projet de vente. *
-                  </label>
-                </div>
-                
-                <Button
-                  onClick={handleEstimate}
-                  disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.consent || loading}
-                  className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                >
-                  {loading ? (
-                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Calcul en cours...</>
-                  ) : (
-                    <>Voir mon estimation gratuite <ArrowRight className="w-5 h-5 ml-2" /></>
-                  )}
-                </Button>
+                {/* Formulaire de base */}
+                {otpStep === 'form' && (
+                  <>
+                    <div>
+                      <Label className="font-semibold">Nom complet *</Label>
+                      <Input
+                        placeholder="Ex: Jean Dupont"
+                        value={leadForm.name}
+                        onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                        className="mt-2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="font-semibold">Email *</Label>
+                      <Input
+                        type="email"
+                        placeholder="Ex: jean.dupont@email.com"
+                        value={leadForm.email}
+                        onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
+                        className="mt-2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="font-semibold">Téléphone *</Label>
+                      <Input
+                        type="tel"
+                        placeholder="Ex: 06 12 34 56 78"
+                        value={leadForm.phone}
+                        onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Un code de vérification sera envoyé par SMS
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <input
+                        type="checkbox"
+                        checked={leadForm.consent}
+                        onChange={(e) => setLeadForm({ ...leadForm, consent: e.target.checked })}
+                        className="mt-1 w-5 h-5"
+                        id="consent"
+                      />
+                      <label htmlFor="consent" className="text-sm text-gray-700">
+                        J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée et bénéficier d'un accompagnement personnalisé dans mon projet de vente. *
+                      </label>
+                    </div>
+                    
+                    {otpError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {otpError}
+                      </div>
+                    )}
+                    
+                    <Button
+                      onClick={handleSendOTP}
+                      disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.consent || loading}
+                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                    >
+                      {loading ? (
+                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Envoi du code...</>
+                      ) : (
+                        <>Continuer <ArrowRight className="w-5 h-5 ml-2" /></>
+                      )}
+                    </Button>
+                  </>
+                )}
+
+                {/* Étape de vérification OTP */}
+                {otpStep === 'otp' && (
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <h3 className="text-xl font-semibold">Vérifiez votre téléphone</h3>
+                      <p className="text-sm text-gray-600">
+                        Nous avons envoyé un code à 6 chiffres au <strong>{leadForm.phone}</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex justify-center">
+                      <InputOTP
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(value) => {
+                          setOtpCode(value);
+                          setOtpError('');
+                        }}
+                        disabled={loading}
+                      >
+                        <InputOTPGroup>
+                          <InputOTPSlot index={0} />
+                          <InputOTPSlot index={1} />
+                          <InputOTPSlot index={2} />
+                        </InputOTPGroup>
+                        <InputOTPSeparator />
+                        <InputOTPGroup>
+                          <InputOTPSlot index={3} />
+                          <InputOTPSlot index={4} />
+                          <InputOTPSlot index={5} />
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+
+                    {otpError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm text-center">
+                        {otpError}
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleVerifyOTP}
+                      disabled={otpCode.length !== 6 || loading}
+                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                    >
+                      {loading ? (
+                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Vérification...</>
+                      ) : (
+                        <>Vérifier le code</>
+                      )}
+                    </Button>
+
+                    <div className="text-center border-t pt-4">
+                      <button
+                        onClick={handleResendOTP}
+                        disabled={otpCountdown > 0 || loading}
+                        className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {otpCountdown > 0 ? (
+                          `Renvoyer le code dans ${otpCountdown}s`
+                        ) : (
+                          <>
+                            <RotateCcw className="inline w-4 h-4 mr-1" />
+                            Renvoyer le code
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setOtpStep('form');
+                        setOtpCode('');
+                        setOtpError('');
+                      }}
+                      className="text-sm text-gray-600 hover:text-gray-800 underline w-full text-center"
+                    >
+                      Modifier mon numéro de téléphone
+                    </button>
+                  </div>
+                )}
+
+                {/* Téléphone vérifié */}
+                {otpStep === 'verified' && (
+                  <div className="space-y-6">
+                    <div className="text-center space-y-3 p-6 bg-green-50 rounded-lg border-2 border-green-200">
+                      <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto" />
+                      <h3 className="text-xl font-semibold text-green-800">Téléphone vérifié !</h3>
+                      <p className="text-sm text-green-700">
+                        Votre numéro <strong>{leadForm.phone}</strong> a été vérifié avec succès
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                      <p><strong>Nom :</strong> {leadForm.name}</p>
+                      <p><strong>Email :</strong> {leadForm.email}</p>
+                      <p><strong>Téléphone :</strong> {leadForm.phone}</p>
+                    </div>
+
+                    {otpError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {otpError}
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleEstimate}
+                      disabled={loading}
+                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                    >
+                      {loading ? (
+                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Calcul en cours...</>
+                      ) : (
+                        <>Voir mon estimation gratuite <ArrowRight className="w-5 h-5 ml-2" /></>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="text-center space-y-2 text-sm text-gray-500">
