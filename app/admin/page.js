@@ -248,7 +248,7 @@ export default function AdminPage() {
   };
 
   const filteredLeads = leads.filter(lead => {
-    if (!searchQuery && filterStatus === 'all' && filterType === 'all') return true;
+    if (!searchQuery && filterStatus === 'all' && filterType === 'all' && !filterReason) return true;
     
     let matches = true;
     
@@ -267,6 +267,10 @@ export default function AdminPage() {
     
     if (filterType !== 'all') {
       matches = matches && lead.property?.type === filterType;
+    }
+    
+    if (filterReason) {
+      matches = matches && lead.estimationReason === filterReason;
     }
     
     return matches;
