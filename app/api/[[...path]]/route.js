@@ -6,6 +6,15 @@ import { calculateAdjustments, calculateAdjustedPrice } from '../../../lib/dvf-a
 import { ingestDVFDepartment } from '../../../lib/dvf-ingestion';
 import { scrapeSeLoger, calculateMarketStats } from '../../../lib/scraper';
 import { getDVFStats, startDVFIngestion, getIngestionState, clearDVFData } from '../../../lib/dvf-admin';
+import { 
+  generateOTP, 
+  normalizePhoneNumber, 
+  isValidFrenchPhone, 
+  shouldBypassVerification,
+  sendOTPSMS,
+  calculateExpirationTime,
+  isOTPExpired
+} from '../../../lib/otp-service';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
