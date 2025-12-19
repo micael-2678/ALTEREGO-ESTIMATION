@@ -442,10 +442,11 @@ export default function AdminPage() {
             </Select>
             
             {/* Reset Filters */}
-            {(filterStatus !== 'all' || filterType !== 'all' || searchQuery) && (
+            {(filterStatus !== 'all' || filterType !== 'all' || filterReason || searchQuery) && (
               <Button variant="outline" size="sm" onClick={() => {
                 setFilterStatus('all');
                 setFilterType('all');
+                setFilterReason(null);
                 setSearchQuery('');
               }}>
                 <X className="w-4 h-4 mr-2" /> Réinitialiser
