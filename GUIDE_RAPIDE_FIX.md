@@ -27,14 +27,14 @@ mongodb://mongo:ungjjv3llz1dqst0@alterego-estimation-mongodbalterego-w4vqu9:2701
 
 Testez cette URL dans votre navigateur:
 ```
-https://google-ads-setup.preview.emergentagent.com/test-mongo
+https://verif-portable.preview.emergentagent.com/test-mongo
 ```
 
 Si vous voyez **~850,000 documents** → ✅ C'EST BON !
 
 Ensuite testez une estimation sur:
 ```
-https://google-ads-setup.preview.emergentagent.com
+https://verif-portable.preview.emergentagent.com
 ```
 
 ---

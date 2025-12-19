@@ -95,7 +95,7 @@ DB_NAME=alterego_db
 JWT_SECRET=alterego-secret-key-2025
 ADMIN_USERNAME=Micael
 ADMIN_PASSWORD=Micael123
-NEXT_PUBLIC_BASE_URL=https://google-ads-setup.preview.emergentagent.com
+NEXT_PUBLIC_BASE_URL=https://verif-portable.preview.emergentagent.com
 ```
 
 ### Peupler les données DVF (sample)
@@ -143,7 +143,7 @@ const records = parse(csvContent, { columns: true });
 ## 🔐 Authentification Admin
 
 ### Connexion
-- URL : https://google-ads-setup.preview.emergentagent.com/admin
+- URL : https://verif-portable.preview.emergentagent.com/admin
 - Identifiant : **Micael**
 - Mot de passe : **Micael123**
 
