@@ -204,6 +204,42 @@ backend:
           agent: "testing"
           comment: "❌ GET /api/market/listings - SeLoger scraping fails in test environment (expected limitation). API handles gracefully by returning error message with empty listings array. This is acceptable for MVP as noted in requirements"
 
+  - task: "SMS OTP Send API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented POST /api/verification/send-otp endpoint. Generates 6-digit OTP, stores in MongoDB with 5min expiration, sends SMS via Brevo API. Includes rate limiting (30s cooldown), phone number normalization (French format to E.164), and automatic bypass for phone number 0698793430. Needs testing to verify Brevo SMS integration, OTP generation, and database storage."
+
+  - task: "SMS OTP Verify API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented POST /api/verification/verify-otp endpoint. Validates 6-digit OTP against stored code in MongoDB. Includes expiration check, attempt limiting (max 5 attempts), and automatic bypass for phone 0698793430. Marks OTP as verified on success. Needs testing to verify code validation logic, error handling, and attempt tracking."
+
+  - task: "SMS OTP Resend API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented POST /api/verification/resend-otp endpoint. Deletes previous unverified OTP and generates new code with 30s cooldown enforcement. Includes same bypass logic for 0698793430. Needs testing to verify cooldown mechanism and new code generation."
+
 frontend:
   # Frontend testing not performed as per instructions
 
