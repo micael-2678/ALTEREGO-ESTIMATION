@@ -915,6 +915,39 @@ export default function App() {
                       </p>
                     </div>
                     
+                    <div>
+                      <Label className="font-semibold mb-3 block">Raison de l'estimation *</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setLeadForm({ ...leadForm, estimationReason: 'Acheter' })}
+                          className={`p-4 border-2 rounded-xl transition-all text-center ${
+                            leadForm.estimationReason === 'Acheter'
+                              ? 'border-black bg-gray-50 font-semibold shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="text-2xl mb-2">🏠</div>
+                          <div className="font-medium">Acheter</div>
+                          <div className="text-xs text-gray-500 mt-1">Je cherche à acheter</div>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setLeadForm({ ...leadForm, estimationReason: 'Vendre' })}
+                          className={`p-4 border-2 rounded-xl transition-all text-center ${
+                            leadForm.estimationReason === 'Vendre'
+                              ? 'border-black bg-gray-50 font-semibold shadow-md'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="text-2xl mb-2">💰</div>
+                          <div className="font-medium">Vendre</div>
+                          <div className="text-xs text-gray-500 mt-1">Je veux vendre mon bien</div>
+                        </button>
+                      </div>
+                    </div>
+                    
                     <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                       <input
                         type="checkbox"
