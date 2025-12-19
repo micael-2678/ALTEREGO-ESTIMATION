@@ -424,6 +424,18 @@ export default function AdminPage() {
               </SelectContent>
             </Select>
             
+            {/* Filter Raison */}
+            <Select value={filterReason || 'all'} onValueChange={(val) => setFilterReason(val === 'all' ? null : val)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Raison" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes raisons</SelectItem>
+                <SelectItem value="Acheter">🏠 Acheter</SelectItem>
+                <SelectItem value="Vendre">💰 Vendre</SelectItem>
+              </SelectContent>
+            </Select>
+            
             {/* Reset Filters */}
             {(filterStatus !== 'all' || filterType !== 'all' || searchQuery) && (
               <Button variant="outline" size="sm" onClick={() => {
