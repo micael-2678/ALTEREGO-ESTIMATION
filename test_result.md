@@ -259,10 +259,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "SMS OTP Send API"
-    - "SMS OTP Verify API"
-    - "SMS OTP Resend API"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
