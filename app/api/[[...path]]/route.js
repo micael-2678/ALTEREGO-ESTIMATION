@@ -258,6 +258,256 @@ export async function POST(request) {
       );
     }
 
+    // Send OTP for phone verification
+    if (pathname === '/api/verification/send-otp') {
+      const { phone } = await request.json();
+      
+      if (!phone) {
+        return NextResponse.json(
+          { error: 'Phone number is required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Normaliser le numéro
+      const normalizedPhone = normalizePhoneNumber(phone);
+      
+      // Vérifier si le numéro bypass la vérification
+      if (shouldBypassVerification(phone)) {
+        return NextResponse.json(
+          { success: true, bypass: true, message: 'Verification bypassed for this number' },
+          { headers: corsHeaders }
+        );
+      }
+      
+      // Valider le format
+      if (!isValidFrenchPhone(normalizedPhone)) {
+        return NextResponse.json(
+          { error: 'Invalid French phone number format. Use format: 06 12 34 56 78' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('otp_verifications');
+      
+      // Vérifier s'il existe déjà un OTP non expiré (rate limiting)
+      const existingOTP = await collection.findOne({
+        phone: normalizedPhone,
+        verified: false,
+        expiresAt: { $gt: new Date() }
+      });
+      
+      if (existingOTP) {
+        // Vérifier si créé il y a moins de 30 secondes (cooldown)
+        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+        if (new Date(existingOTP.createdAt) > thirtySecondsAgo) {
+          return NextResponse.json(
+            { error: 'Please wait 30 seconds before requesting another code' },
+            { status: 429, headers: corsHeaders }
+          );
+        }
+      }
+      
+      // Supprimer les anciens OTP pour ce numéro
+      await collection.deleteMany({
+        phone: normalizedPhone,
+        verified: false
+      });
+      
+      // Générer un nouveau code
+      const code = generateOTP(6);
+      const expiresAt = calculateExpirationTime(5); // 5 minutes
+      
+      // Sauvegarder en base
+      await collection.insertOne({
+        phone: normalizedPhone,
+        code,
+        createdAt: new Date(),
+        expiresAt,
+        verified: false,
+        attempts: 0
+      });
+      
+      // Envoyer le SMS via Brevo
+      const smsResult = await sendOTPSMS(normalizedPhone, code);
+      
+      if (!smsResult.success) {
+        // Supprimer l'OTP si l'envoi a échoué
+        await collection.deleteOne({ phone: normalizedPhone, code });
+        return NextResponse.json(
+          { error: 'Failed to send verification code. Please try again.' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: 'Verification code sent successfully',
+          expiresInSeconds: 5 * 60
+        },
+        { headers: corsHeaders }
+      );
+    }
+    
+    // Verify OTP
+    if (pathname === '/api/verification/verify-otp') {
+      const { phone, code } = await request.json();
+      
+      if (!phone || !code) {
+        return NextResponse.json(
+          { error: 'Phone and code are required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Normaliser le numéro
+      const normalizedPhone = normalizePhoneNumber(phone);
+      
+      // Vérifier si le numéro bypass la vérification
+      if (shouldBypassVerification(phone)) {
+        return NextResponse.json(
+          { success: true, verified: true, bypass: true, message: 'Verification bypassed' },
+          { headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('otp_verifications');
+      
+      // Trouver l'OTP
+      const otpRecord = await collection.findOne({
+        phone: normalizedPhone,
+        verified: false
+      });
+      
+      if (!otpRecord) {
+        return NextResponse.json(
+          { error: 'No pending verification for this phone number' },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+      
+      // Vérifier l'expiration
+      if (isOTPExpired(otpRecord.expiresAt)) {
+        await collection.deleteOne({ _id: otpRecord._id });
+        return NextResponse.json(
+          { error: 'Verification code has expired. Please request a new one.' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Vérifier le nombre de tentatives
+      const maxAttempts = parseInt(process.env.MAX_OTP_ATTEMPTS) || 5;
+      if (otpRecord.attempts >= maxAttempts) {
+        await collection.deleteOne({ _id: otpRecord._id });
+        return NextResponse.json(
+          { error: 'Too many failed attempts. Please request a new code.' },
+          { status: 429, headers: corsHeaders }
+        );
+      }
+      
+      // Vérifier le code
+      if (otpRecord.code !== code) {
+        // Incrémenter les tentatives
+        await collection.updateOne(
+          { _id: otpRecord._id },
+          { $inc: { attempts: 1 } }
+        );
+        return NextResponse.json(
+          { error: 'Invalid verification code', attemptsRemaining: maxAttempts - otpRecord.attempts - 1 },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Marquer comme vérifié
+      await collection.updateOne(
+        { _id: otpRecord._id },
+        { $set: { verified: true, verifiedAt: new Date() } }
+      );
+      
+      return NextResponse.json(
+        { success: true, verified: true, message: 'Phone verified successfully' },
+        { headers: corsHeaders }
+      );
+    }
+    
+    // Resend OTP
+    if (pathname === '/api/verification/resend-otp') {
+      const { phone } = await request.json();
+      
+      if (!phone) {
+        return NextResponse.json(
+          { error: 'Phone number is required' },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
+      // Réutiliser la logique de send-otp
+      const normalizedPhone = normalizePhoneNumber(phone);
+      
+      // Vérifier si le numéro bypass la vérification
+      if (shouldBypassVerification(phone)) {
+        return NextResponse.json(
+          { success: true, bypass: true, message: 'Verification bypassed for this number' },
+          { headers: corsHeaders }
+        );
+      }
+      
+      const collection = await getCollection('otp_verifications');
+      
+      // Vérifier le cooldown (30 secondes)
+      const recentOTP = await collection.findOne({
+        phone: normalizedPhone,
+        verified: false,
+        createdAt: { $gt: new Date(Date.now() - 30 * 1000) }
+      });
+      
+      if (recentOTP) {
+        return NextResponse.json(
+          { error: 'Please wait 30 seconds before requesting another code' },
+          { status: 429, headers: corsHeaders }
+        );
+      }
+      
+      // Supprimer les anciens OTP
+      await collection.deleteMany({
+        phone: normalizedPhone,
+        verified: false
+      });
+      
+      // Générer et envoyer un nouveau code
+      const code = generateOTP(6);
+      const expiresAt = calculateExpirationTime(5);
+      
+      await collection.insertOne({
+        phone: normalizedPhone,
+        code,
+        createdAt: new Date(),
+        expiresAt,
+        verified: false,
+        attempts: 0
+      });
+      
+      const smsResult = await sendOTPSMS(normalizedPhone, code);
+      
+      if (!smsResult.success) {
+        await collection.deleteOne({ phone: normalizedPhone, code });
+        return NextResponse.json(
+          { error: 'Failed to send verification code. Please try again.' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+      
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: 'New verification code sent successfully',
+          expiresInSeconds: 5 * 60
+        },
+        { headers: corsHeaders }
+      );
+    }
+
     // Submit lead
     if (pathname === '/api/leads') {
       const leadData = await request.json();
