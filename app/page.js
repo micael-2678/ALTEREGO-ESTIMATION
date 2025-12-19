@@ -149,7 +149,150 @@ export default function App() {
     return Object.fromEntries(Object.entries(chars).filter(([_, v]) => v !== undefined));
   };
 
+  // Envoyer le code OTP
+  const handleSendOTP = async () => {
+    if (!leadForm.phone) {
+      setOtpError('Veuillez saisir votre numéro de téléphone');
+      return;
+    }
+    
+    setLoading(true);
+    setOtpError('');
+    
+    try {
+      const res = await fetch('/api/verification/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: leadForm.phone })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setOtpError(data.error || 'Erreur lors de l\'envoi du code');
+        setLoading(false);
+        return;
+      }
+      
+      // Si bypass
+      if (data.bypass) {
+        setPhoneVerified(true);
+        setOtpStep('verified');
+        setLoading(false);
+        return;
+      }
+      
+      // Passer à l'étape OTP
+      setOtpStep('otp');
+      setOtpCountdown(60);
+      
+      // Démarrer le compte à rebours
+      const interval = setInterval(() => {
+        setOtpCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+    } catch (error) {
+      console.error('OTP send error:', error);
+      setOtpError('Erreur lors de l\'envoi du code');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Vérifier le code OTP
+  const handleVerifyOTP = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError('Veuillez saisir le code à 6 chiffres');
+      return;
+    }
+    
+    setLoading(true);
+    setOtpError('');
+    
+    try {
+      const res = await fetch('/api/verification/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          phone: leadForm.phone,
+          code: otpCode 
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setOtpError(data.error || 'Code invalide');
+        setOtpCode('');
+        setLoading(false);
+        return;
+      }
+      
+      // Vérification réussie
+      setPhoneVerified(true);
+      setOtpStep('verified');
+      
+    } catch (error) {
+      console.error('OTP verify error:', error);
+      setOtpError('Erreur lors de la vérification');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Renvoyer le code OTP
+  const handleResendOTP = async () => {
+    setLoading(true);
+    setOtpError('');
+    setOtpCode('');
+    
+    try {
+      const res = await fetch('/api/verification/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: leadForm.phone })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setOtpError(data.error || 'Erreur lors du renvoi du code');
+        setLoading(false);
+        return;
+      }
+      
+      // Réinitialiser le compte à rebours
+      setOtpCountdown(60);
+      const interval = setInterval(() => {
+        setOtpCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+    } catch (error) {
+      console.error('OTP resend error:', error);
+      setOtpError('Erreur lors du renvoi du code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEstimate = async () => {
+    if (!phoneVerified) {
+      setOtpError('Veuillez vérifier votre numéro de téléphone');
+      return;
+    }
+    
     setLoading(true);
     
     // Tracker la conversion Google Ads
@@ -165,7 +308,8 @@ export default function App() {
         body: JSON.stringify({
           ...leadForm,
           property: formData,
-          status: 'pending_estimation' // Lead capturé, estimation en cours
+          status: 'pending_estimation', // Lead capturé, estimation en cours
+          phoneVerified: true
         })
       });
       
@@ -196,7 +340,8 @@ export default function App() {
           ...leadForm,
           property: formData,
           estimation: data,
-          status: 'estimation_complete'
+          status: 'estimation_complete',
+          phoneVerified: true
         })
       });
       
