@@ -64,6 +64,7 @@ export default function App() {
     name: '',
     email: '',
     phone: '',
+    estimationReason: '', // "Acheter" ou "Vendre"
     consent: false
   });
 
