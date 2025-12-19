@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { Home, Building2, MapPin, ArrowRight, Loader2, Info } from 'lucide-react';
+import { Home, Building2, MapPin, ArrowRight, Loader2, Info, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp';
 import dynamic from 'next/dynamic';
 
 const EstimationMap = dynamic(() => import('@/components/EstimationMap'), { ssr: false });
@@ -15,6 +16,13 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // États pour la vérification OTP
+  const [otpStep, setOtpStep] = useState('form'); // 'form', 'otp', 'verified'
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [phoneVerified, setPhoneVerified] = useState(false);
   
   const [formData, setFormData] = useState({
     // Étape 1: Adresse
