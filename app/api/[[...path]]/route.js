@@ -223,6 +223,19 @@ export async function GET(request) {
       }, { headers: corsHeaders });
     }
 
+    // Test endpoint pour vérifier les variables d'environnement (GET)
+    if (pathname === '/api/test-env') {
+      return NextResponse.json(
+        {
+          hasBrevoKey: !!process.env.BREVO_API_KEY,
+          keyPrefix: process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.substring(0, 15) + '...' : 'NOT_SET',
+          hasBypassPhone: !!process.env.BYPASS_PHONE_NUMBER,
+          nodeEnv: process.env.NODE_ENV
+        },
+        { headers: corsHeaders }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Not found' },
       { status: 404, headers: corsHeaders }
