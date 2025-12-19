@@ -969,7 +969,7 @@ export default function App() {
                     
                     <Button
                       onClick={handleSendOTP}
-                      disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.consent || loading}
+                      disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.estimationReason || !leadForm.consent || loading}
                       className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
                     >
                       {loading ? (
