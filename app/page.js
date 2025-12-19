@@ -157,6 +157,11 @@ export default function App() {
       return;
     }
     
+    if (!leadForm.estimationReason) {
+      setOtpError('Veuillez indiquer la raison de votre estimation');
+      return;
+    }
+    
     setLoading(true);
     setOtpError('');
     
