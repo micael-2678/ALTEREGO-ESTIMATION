@@ -522,19 +522,6 @@ export async function POST(request) {
       );
     }
 
-    // Test endpoint pour vérifier les variables d'environnement
-    if (pathname === '/api/test-env') {
-      return NextResponse.json(
-        {
-          hasBrevoKey: !!process.env.BREVO_API_KEY,
-          keyPrefix: process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.substring(0, 15) + '...' : 'NOT_SET',
-          hasBypassPhone: !!process.env.BYPASS_PHONE_NUMBER,
-          nodeEnv: process.env.NODE_ENV
-        },
-        { headers: corsHeaders }
-      );
-    }
-
     // Submit lead
     if (pathname === '/api/leads') {
       const leadData = await request.json();
