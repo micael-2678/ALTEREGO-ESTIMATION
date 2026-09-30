@@ -13,7 +13,7 @@ const comparables = Array.from({ length: 9 }, (_, i) => ({
 }));
 
 const estimate = {
-  dvf: { count: 9, radius: 500, months: 24, stats: { weightedAverage: 11700 }, comparables, warning: null },
+  dvf: { count: 9, radius: 500, months: 24, stats: { weightedAverage: 11700 }, trend: { annualRatePercent: -3.2, sampleSize: 640, applied: true }, comparables, warning: null },
   adjustments: {
     basePricePerM2: 11700, adjustedPricePerM2: 10820, totalImpact: -0.05, offsetApplied: -8, clampApplied: false,
     adjustments: [
@@ -91,6 +91,7 @@ test('parcours complet : adresse → estimation, un seul lead', async ({ page })
   await expect(page.getByText('Valeur estimée')).toBeVisible();
   await expect(page.getByText('703 300 €').first()).toBeVisible();
   await expect(page.getByText('Ajustement de prudence')).toBeVisible();
+  await expect(page.getByText(/évolue de -3,2 % par an/)).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   // Un seul lead, auquel l'estimation est rattachée

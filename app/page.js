@@ -1027,9 +1027,17 @@ function Results({ results, formData, onReset }) {
         {adjustments?.adjustments?.length > 0 && (
           <section className="ae-card p-6 sm:p-8">
             <h2 className="ae-h3 mb-6">Comment nous l'avons calculée</h2>
-            <div className="flex justify-between items-baseline pb-4 border-b border-ae-line">
-              <span className="font-semibold">Prix de référence du quartier</span>
-              <span className="font-display text-lg">{formatEuros(adjustments.basePricePerM2)}/m²</span>
+            <div className="pb-4 border-b border-ae-line">
+              <div className="flex justify-between items-baseline">
+                <span className="font-semibold">Prix de référence du quartier</span>
+                <span className="font-display text-lg">{formatEuros(adjustments.basePricePerM2)}/m²</span>
+              </div>
+              {dvf?.trend?.applied && (
+                <p className="text-sm text-ae-muted mt-1">
+                  Ventes ramenées à aujourd'hui : le marché local évolue de{' '}
+                  {dvf.trend.annualRatePercent > 0 ? '+' : ''}{dvf.trend.annualRatePercent.toLocaleString('fr-FR')} % par an.
+                </p>
+              )}
             </div>
             <ul>
               {adjustments.adjustments.map((adj, idx) => (

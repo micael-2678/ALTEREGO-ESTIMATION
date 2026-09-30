@@ -4,13 +4,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    # Pas de "ports:" : Traefik joint le conteneur par le réseau dokploy-network
     environment:
       - NODE_ENV=production
+      # Next.js standalone doit écouter sur toutes les interfaces du conteneur
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
       - MONGO_URL=${MONGO_URL:-mongodb://mongodb:27017/alterego_db}
       - DB_NAME=${DB_NAME:-alterego_db}
-      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
       # Pas de valeur par défaut : sans ces variables, l'admin reste désactivé
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
@@ -22,16 +23,25 @@ services:
     restart: unless-stopped
     networks:
       - dokploy-network
-    deploy:
-      mode: replicated
-      replicas: 1
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.alterego.rule=Host(`app.alteregopatrimoine.com`)"
-        - "traefik.http.routers.alterego.entrypoints=web,websecure"
-        - "traefik.http.routers.alterego.tls.certresolver=letsencrypt"
-        - "traefik.http.services.alterego.loadbalancer.server.port=3000"
-        - "traefik.docker.network=dokploy-network"
+    # Les étiquettes Traefik doivent être au niveau du service : celles placées sous
+    # "deploy:" ne sont lues qu'en mode Docker Swarm (Stack) et sont ignorées par
+    # "docker compose up" → Traefik ne connaît aucune route → « 404 page not found ».
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.services.alterego.loadbalancer.server.port=3000
+      # HTTPS
+      - traefik.http.routers.alterego-https.rule=Host(`app.alteregopatrimoine.com`)
+      - traefik.http.routers.alterego-https.entrypoints=websecure
+      - traefik.http.routers.alterego-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.alterego-https.service=alterego
+      # HTTP → redirection vers HTTPS. Un routeur avec TLS ne répond jamais en HTTP :
+      # l'ancien routeur unique "web,websecure + tls" renvoyait 404 sur http://
+      - traefik.http.routers.alterego-http.rule=Host(`app.alteregopatrimoine.com`)
+      - traefik.http.routers.alterego-http.entrypoints=web
+      - traefik.http.routers.alterego-http.middlewares=alterego-https-redirect
+      - traefik.http.middlewares.alterego-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.alterego-https-redirect.redirectscheme.permanent=true
 
 networks:
   dokploy-network:
