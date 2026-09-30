@@ -2,7 +2,7 @@ import { getCollection } from '../../../lib/mongodb';
 import { getAdaptiveComparables } from '../../../lib/dvf-enhanced';
 import { calculateAdjustments, calculateAdjustedPrice } from '../../../lib/dvf-adjustments';
 import { ingestDVFDepartment } from '../../../lib/dvf-ingestion';
-import { getDVFStats, startDVFIngestion, getIngestionState, clearDVFData } from '../../../lib/dvf-admin';
+import { startDVFIngestion, clearDVFData } from '../../../lib/dvf-admin';
 import {
   generateOTP,
   normalizePhoneNumber,
@@ -19,6 +19,8 @@ import {
   serverError,
   corsHeadersFor,
   requireAdmin,
+  getAdminUser,
+  adminCookie,
   signAdminToken,
   getJwtSecret,
   safeEqual,
@@ -285,13 +287,24 @@ export async function GET(request) {
       return json(request, result);
     }
 
+    // Session admin courante
+    if (pathname === '/api/auth/session') {
+      const user = getAdminUser(request);
+      return user ? json(request, { authenticated: true, user }) : json(request, { authenticated: false }, 401);
+    }
+
     // Liste des leads (admin)
     if (pathname === '/api/leads') {
       const denied = requireAdmin(request);
       if (denied) return denied;
 
       const collection = await getCollection('leads');
-      const leads = await collection.find({}).sort({ createdAt: -1 }).toArray();
+      // Les 20 ventes comparables de chaque estimation ne servent pas à l'admin : exclues
+      const leads = await collection
+        .find({}, { projection: { _id: 0, 'estimation.dvf.comparables': 0 } })
+        .sort({ createdAt: -1 })
+        .limit(2000)
+        .toArray();
       return json(request, { leads });
     }
 
@@ -347,10 +360,19 @@ export async function POST(request) {
 
       if (safeEqual(username, expectedUser) && safeEqual(password, expectedPassword)) {
         const token = signAdminToken(username);
-        return json(request, { token, user: { username } });
+        const response = json(request, { user: { username } });
+        response.headers.append('Set-Cookie', adminCookie(token));
+        return response;
       }
 
       return json(request, { error: 'Invalid credentials' }, 401);
+    }
+
+    // Déconnexion admin
+    if (pathname === '/api/auth/logout') {
+      const response = json(request, { success: true });
+      response.headers.append('Set-Cookie', adminCookie(null));
+      return response;
     }
 
     // Envoi / renvoi du code OTP
@@ -625,19 +647,6 @@ export async function DELETE(request) {
         return json(request, { error: 'Lead not found' }, 404);
       }
       return json(request, { success: true, deleted: true });
-    }
-
-    // Conservés pour compatibilité (ces lectures devraient être des GET)
-    if (pathname === '/api/admin/dvf/stats') {
-      const denied = requireAdmin(request);
-      if (denied) return denied;
-      return json(request, await getDVFStats());
-    }
-
-    if (pathname === '/api/admin/dvf/status') {
-      const denied = requireAdmin(request);
-      if (denied) return denied;
-      return json(request, getIngestionState());
     }
 
     return json(request, { error: 'Not found' }, 404);

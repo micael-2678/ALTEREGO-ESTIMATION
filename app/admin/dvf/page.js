@@ -8,19 +8,18 @@ export default function DVFAdminPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!localStorage.getItem('adminToken')) {
-      window.location.href = '/admin';
-      return;
-    }
-    loadStats();
+    fetch('/api/auth/session').then(res => {
+      if (!res.ok) {
+        window.location.href = '/admin';
+        return;
+      }
+      loadStats();
+    });
   }, []);
 
   const loadStats = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const res = await fetch('/api/admin/dvf?action=stats', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch('/api/admin/dvf?action=stats');
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -31,22 +30,20 @@ export default function DVFAdminPage() {
   };
 
   const startIngestion = async () => {
-    if (!confirm('Charger ~900 000 transactions DVF depuis data.gouv.fr ?\n\nCela prendra 15-30 minutes.')) {
+    if (!confirm('Recharger les ventes DVF de toute la France (5 dernières années) depuis data.gouv.fr ?\n\nCela peut prendre plusieurs heures.')) {
       return;
     }
     
     setLoading(true);
-    setMessage('⏳ Chargement en cours... (15-30 min)');
+    setMessage('⏳ Chargement en cours… (plusieurs heures)');
 
     try {
-      const token = localStorage.getItem('adminToken');
       const res = await fetch('/api/admin/dvf?action=start', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        method: 'POST'
       });
 
       if (res.ok) {
-        setMessage('✅ Ingestion démarrée ! Rechargez la page dans 20 minutes pour voir les résultats.');
+        setMessage('✅ Ingestion démarrée ! Rechargez la page régulièrement pour suivre la progression.');
       } else {
         const data = await res.json();
         setMessage('❌ Erreur: ' + (data.error || 'Échec'));
@@ -67,10 +64,8 @@ export default function DVFAdminPage() {
     setMessage('⏳ Suppression en cours...');
     
     try {
-      const token = localStorage.getItem('adminToken');
       const res = await fetch('/api/admin/dvf?action=clear', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        method: 'POST'
       });
 
       if (res.ok) {

@@ -21,7 +21,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [leads, setLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [token, setToken] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -33,13 +32,16 @@ export default function AdminPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState(null);
 
+  // Session portée par un cookie httpOnly : on demande simplement au serveur si elle est valide
   useEffect(() => {
-    const savedToken = localStorage.getItem('adminToken');
-    if (savedToken) {
-      setToken(savedToken);
-      setIsAuthenticated(true);
-      loadLeads(savedToken);
-    }
+    fetch('/api/auth/session')
+      .then(res => {
+        if (res.ok) {
+          setIsAuthenticated(true);
+          loadLeads();
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogin = async (e) => {
@@ -54,11 +56,9 @@ export default function AdminPage() {
       });
       
       if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('adminToken', data.token);
-        setToken(data.token);
+        setPassword('');
         setIsAuthenticated(true);
-        loadLeads(data.token);
+        loadLeads();
       } else {
         const data = await res.json().catch(() => ({}));
         alert(res.status === 401 ? 'Identifiants invalides' : (data.error || 'Connexion impossible'));
@@ -71,32 +71,25 @@ export default function AdminPage() {
     }
   };
 
-  const loadLeads = async (authToken) => {
+  const loadLeads = async () => {
     try {
-      const res = await fetch('/api/leads', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
+      const res = await fetch('/api/leads');
       
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads || []);
       } else if (res.status === 401 || res.status === 503) {
         // Session expirée ou admin désactivé : retour à l'écran de connexion
-        localStorage.removeItem('adminToken');
         setIsAuthenticated(false);
-        setToken(null);
       }
     } catch (error) {
       console.error('Error loading leads:', error);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('adminToken');
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     setIsAuthenticated(false);
-    setToken(null);
     setLeads([]);
   };
 
@@ -105,8 +98,7 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/leads/update', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ leadId, status: newStatus })
       });
@@ -138,8 +130,7 @@ export default function AdminPage() {
       await fetch('/api/admin/leads/comment', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
           leadId, 
@@ -149,7 +140,7 @@ export default function AdminPage() {
         })
       });
       setNewComment('');
-      loadLeads(token);
+      loadLeads();
     } catch (error) {
       console.error('Error adding comment:', error);
     }
@@ -161,8 +152,7 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/leads/update', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ leadId, updates })
       });
@@ -195,11 +185,8 @@ export default function AdminPage() {
     if (!leadToDelete) return;
     
     try {
-      const res = await fetch(`/api/admin/leads/delete?leadId=${leadToDelete}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const res = await fetch(`/api/admin/leads/delete?leadId=${encodeURIComponent(leadToDelete)}`, {
+        method: 'DELETE'
       });
       
       if (res.ok) {

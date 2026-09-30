@@ -109,7 +109,26 @@ test("mode intégré : pas d'en-tête ni de pied de page", async ({ page }) => {
   await expect(page.locator('footer')).toHaveCount(0);
 });
 
-test("l'admin affiche l'écran de connexion", async ({ page }) => {
+test("admin : connexion puis liste des leads", async ({ page }) => {
+  let loggedIn = false;
+  await page.route('**/api/auth/session', r => loggedIn
+    ? r.fulfill({ json: { authenticated: true, user: { username: 'admin' } } })
+    : r.fulfill({ status: 401, json: { authenticated: false } }));
+  await page.route('**/api/auth/login', r => { loggedIn = true; r.fulfill({ json: { user: { username: 'admin' } } }); });
+  await page.route('**/api/leads', r => r.fulfill({ json: { leads: [{
+    id: 'L1', name: 'Jeanne Martin', email: 'jeanne@test.fr', phone: '0612345678', estimationReason: 'Vendre',
+    status: 'estimation_complete', createdAt: '2026-09-30T10:00:00.000Z',
+    property: { address: '2 Rue des Italiens 75009 Paris', type: 'appartement', surface: '65' },
+    estimation: { finalPrice: { low: 654069, mid: 703300, high: 752531, confidence: 81 } }
+  }] } }));
+
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Administration' })).toBeVisible();
+  await page.getByPlaceholder("Entrez votre nom d'utilisateur").fill('admin');
+  await page.getByPlaceholder('Entrez votre mot de passe').fill('secret');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+
+  await expect(page.getByText('Jeanne Martin')).toBeVisible();
+  // Le prix affiché est le prix estimé, pas le bas de fourchette
+  await expect(page.getByText(/703.300 €/).first()).toBeVisible();
 });

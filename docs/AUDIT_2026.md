@@ -124,16 +124,29 @@ estimations servait probablement à compenser la surévaluation due aux ventes e
   package renommé, `README.md` et `.env.example` réécrits.
 - 17 tests unitaires (`yarn test`) et CI GitHub Actions (tests + build) sur chaque PR.
 
-## 6. Axes d'amélioration restants
+## 6. Troisième passe
+
+- **Next.js 14.2.3 → 15.5** et React 19 : la branche 14 n'est plus maintenue et plusieurs
+  failles critiques/hautes n'y sont pas corrigées. `yarn audit` : 0 vulnérabilité sur les
+  dépendances de production.
+- 40 composants d'interface et 37 dépendances inutilisés supprimés (installation et build
+  plus rapides, image Docker plus légère), Docker passé en Node 22, `.env` exclu de l'image.
+- **Session admin par cookie `httpOnly` / `SameSite=Strict`** au lieu du `localStorage`
+  (un script injecté ne peut plus voler la session) ; bouton de déconnexion côté serveur.
+- La liste des leads n'envoie plus les 20 ventes comparables de chaque estimation.
+- Routes `DELETE` qui faisaient des lectures supprimées.
+- Débordement horizontal sur mobile corrigé (adresses longues dans les résultats).
+- Tests de bout en bout Playwright (tunnel complet sur ordinateur et mobile, mode intégré,
+  admin) exécutés par la CI à chaque pull request.
+
+## 7. Axes d'amélioration restants
 
 1. **Modèle** : indexer les prix anciens sur l'évolution du marché (indices
    Notaires-INSEE) ; exploiter nombre de pièces et année de construction ; constituer un
    jeu de ventes connues pour mesurer l'erreur médiane et recalibrer les poids.
 2. **Recherche géographique** : index `2dsphere` + `$geoNear` au lieu de la boîte englobante.
-3. **Architecture de l'API** : découper `[[...path]]/route.js` en routes Next.js ; supprimer
-   les routes `DELETE` qui sont en réalité des lectures.
-4. **Admin** : jeton en `localStorage` → cookie `httpOnly` ; pagination des leads.
+3. **Architecture de l'API** : découper `[[...path]]/route.js` en routes Next.js.
+4. **Admin** : pagination côté serveur au-delà de 2 000 leads.
 5. **RGPD** : faire valider la mention « ses partenaires » du consentement ; définir une
    durée de conservation des leads.
-6. **Tests** : ajouter un test Playwright du tunnel complet dans la CI.
-7. **Limitation de débit** en mémoire : suffisante pour une seule instance.
+6. **Limitation de débit** en mémoire : suffisante pour une seule instance.
