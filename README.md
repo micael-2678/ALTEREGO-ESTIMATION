@@ -45,17 +45,41 @@ médiane, la part d'estimations à ±10 % et le `CALIBRATION_OFFSET` recommandé
 
 ## Déploiement (Dokploy + Traefik)
 
-`docker-compose.yml` porte lui-même le routage Traefik vers `app.alteregopatrimoine.com`
-(HTTPS + redirection HTTP → HTTPS). Si le site répond **« 404 page not found »** :
+L'application est déployée sur Dokploy comme **Application** (build *Dockerfile*). Dans ce
+mode, `docker-compose.yml` n'est pas utilisé : le routage Traefik vient **uniquement de
+l'onglet Domains** de l'application Dokploy. Réglages attendus :
 
-1. **Étiquettes Traefik absentes** : elles doivent être sous `labels:` au niveau du service
-   (celles sous `deploy:` ne sont lues qu'en mode Swarm). Vérifier sur le serveur :
-   `docker inspect <conteneur> --format '{{json .Config.Labels}}' | grep traefik`
-2. **Traefik trop ancien pour Docker 29+** : Traefik < 3.6 ne peut plus lire Docker et
-   répond 404 à toutes les applications. Vérifier :
-   `docker logs dokploy-traefik 2>&1 | grep "too old"` — si le message apparaît, mettre
-   Traefik à jour en v3.6 ou plus récent (image `traefik:v3.6`).
-3. **Réseau** : le service doit être sur le réseau externe `dokploy-network`.
+| Champ | Valeur |
+|---|---|
+| Host | `app.alteregopatrimoine.com` |
+| Path | `/` |
+| Container Port | `3000` |
+| HTTPS | activé, certificat Let's Encrypt |
+
+Des étiquettes Traefik ajoutées à la main sur le conteneur sont effacées à chaque
+redéploiement : ne pas s'en servir.
+
+### « 404 page not found »
+
+Sur le serveur (SSH, en root), depuis le dossier du code :
+
+```bash
+sh scripts/diagnostic-traefik.sh
+```
+
+Le script ne modifie rien. Il affiche les versions, la route déclarée par Dokploy, teste
+l'application depuis Traefik puis en HTTP/HTTPS, et termine par une conclusion. Causes
+reproduites :
+
+| Symptôme | Cause | Correction |
+|---|---|---|
+| 404 en HTTP et HTTPS | aucun domaine dans l'onglet Domains | ajouter le domaine (tableau ci-dessus) |
+| HTTP 200, **HTTPS 404** | domaine créé sans HTTPS | activer HTTPS sur le domaine |
+| 502 Bad Gateway | mauvais port (≠ 3000) ou conteneur arrêté | corriger le port, voir les logs |
+| 404 sur les routes `docker-compose` | Traefik < 3.6 avec Docker 29+ | mettre Traefik à jour |
+
+`docker-compose.yml` reste utilisable si l'application est un jour déployée en mode
+*Docker Compose* : il porte alors lui-même ses étiquettes Traefik.
 
 Les scripts d'import DVF fonctionnent dans le conteneur :
 `docker exec -it <conteneur> node scripts/ingest-dvf.js 75`.
