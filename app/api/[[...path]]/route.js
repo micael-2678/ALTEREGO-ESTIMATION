@@ -13,6 +13,7 @@ import {
   isOTPExpired
 } from '../../../lib/otp-service';
 import { createOrUpdateBrevoContact } from '../../../lib/brevo-contact-service';
+import { initOTPIndexes } from '../../../lib/init-otp-indexes';
 import {
   json,
   serverError,
@@ -43,6 +44,23 @@ const DVF_SEARCH = {
 
 export async function OPTIONS(request) {
   return new NextResponse(null, { status: 204, headers: corsHeadersFor(request) });
+}
+
+// Index MongoDB (dont le TTL qui purge les codes OTP expirés), créés une fois par instance
+let indexesReady = null;
+function ensureIndexes() {
+  if (!indexesReady) {
+    indexesReady = (async () => {
+      await initOTPIndexes();
+      const leads = await getCollection('leads');
+      await leads.createIndex({ id: 1 }, { unique: true, name: 'lead_id_unique' });
+      await leads.createIndex({ createdAt: -1 }, { name: 'lead_created_at' });
+    })().catch(error => {
+      indexesReady = null;
+      console.error('Index creation failed:', error);
+    });
+  }
+  return indexesReady;
 }
 
 async function readJson(request) {
@@ -119,8 +137,8 @@ function syncBrevo(lead) {
     .catch(error => console.error('Brevo sync error:', error));
 }
 
-// Estimation complète : comparables DVF + ajustements + (option) annonces du marché
-async function computeEstimation({ address, lat, lng, type, surface, characteristics = {} }) {
+// Estimation complète : comparables DVF + ajustements
+async function computeEstimation({ lat, lng, type, surface, characteristics = {} }) {
   const dvfResult = await getAdaptiveComparables({ lat, lng, type, surface, ...DVF_SEARCH });
 
   let adjustmentData = null;
@@ -136,6 +154,13 @@ async function computeEstimation({ address, lat, lng, type, surface, characteris
     );
 
     adjustmentData = { ...adjustmentResult, ...priceData };
+    // Un seul indicateur de fiabilité pour tout l'écran : l'avertissement suit la confiance finale
+    dvfResult.warning = priceData.confidence < 50
+      ? 'Peu de ventes comparables dans ce secteur : estimation indicative. Un rendez-vous avec un conseiller est recommandé pour l\'affiner.'
+      : priceData.confidence < 65
+        ? 'Données limitées dans ce secteur : estimation à considérer avec précaution.'
+        : null;
+
     finalPrice = {
       mid: priceData.priceMid,
       low: priceData.priceLow,
@@ -144,32 +169,10 @@ async function computeEstimation({ address, lat, lng, type, surface, characteris
     };
   }
 
-  // Le scraping SeLoger est lent (navigateur headless, 30 s+), fragile (anti-bot,
-  // sélecteurs CSS) et juridiquement risqué : désactivé sauf activation explicite.
-  let marketResult = { listings: [], stats: null };
-  if (process.env.MARKET_SCRAPING_ENABLED === 'true') {
-    try {
-      const { scrapeSeLoger, calculateMarketStats } = await import('../../../lib/scraper');
-      const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
-      marketResult = { listings: listings.slice(0, 20), stats: calculateMarketStats(listings) };
-    } catch (error) {
-      console.error('Market scraping failed:', error);
-    }
-  }
-
-  let delta = null;
-  if (adjustmentData && marketResult.stats) {
-    const adjustedPrice = adjustmentData.adjustedPricePerM2;
-    const marketPrice = marketResult.stats.medianPricePerM2;
-    delta = ((marketPrice - adjustedPrice) / adjustedPrice * 100).toFixed(1);
-  }
-
   return {
     dvf: dvfResult,
     adjustments: adjustmentData,
     finalPrice,
-    market: marketResult,
-    delta,
     disclaimer: 'Estimations basées sur DVF (open data) et ajustements selon caractéristiques — valeurs indicatives, non contractuelles.'
   };
 }
@@ -193,6 +196,7 @@ async function issueOTP(request, phone) {
     return json(request, { error: 'Trop de demandes. Réessayez plus tard.' }, 429);
   }
 
+  await ensureIndexes();
   const collection = await getCollection('otp_verifications');
 
   const recentOTP = await collection.findOne({
@@ -332,6 +336,10 @@ export async function POST(request) {
       if (!expectedUser || !expectedPassword || !getJwtSecret()) {
         return json(request, { error: 'Admin login is not configured' }, 503);
       }
+      // Mots de passe publiés dans l'historique du dépôt : considérés comme compromis
+      if (['Micael123', 'MotDePasseSecurise123!', 'VotreMotDePasse123', 'VotreMotDePasse123!', 'VotreMotDePasseSecurise123!'].includes(expectedPassword)) {
+        return json(request, { error: 'ADMIN_PASSWORD compromis : définissez un nouveau mot de passe administrateur' }, 503);
+      }
 
       if (!rateLimit(`login:${clientIp(request)}`, { limit: 10, windowMs: 15 * 60 * 1000 })) {
         return json(request, { error: 'Too many attempts, try again later' }, 429);
@@ -394,7 +402,8 @@ export async function POST(request) {
 
       await collection.updateOne(
         { _id: otpRecord._id },
-        { $set: { verified: true, verifiedAt: new Date() } }
+        // Le document vérifié doit survivre à l'index TTL le temps de créer le lead
+        { $set: { verified: true, verifiedAt: new Date(), expiresAt: new Date(Date.now() + PHONE_VERIFICATION_VALIDITY_MS) } }
       );
       return json(request, { success: true, verified: true });
     }
@@ -434,6 +443,7 @@ export async function POST(request) {
         createdAt: new Date().toISOString()
       };
 
+      await ensureIndexes();
       const collection = await getCollection('leads');
       await collection.insertOne(lead);
 
@@ -455,7 +465,6 @@ export async function POST(request) {
       }
 
       const result = await computeEstimation({
-        address: typeof body.address === 'string' ? body.address : '',
         ...params,
         characteristics: body.characteristics && typeof body.characteristics === 'object' ? body.characteristics : {}
       });

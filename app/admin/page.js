@@ -60,7 +60,8 @@ export default function AdminPage() {
         setIsAuthenticated(true);
         loadLeads(data.token);
       } else {
-        alert('Identifiants invalides');
+        const data = await res.json().catch(() => ({}));
+        alert(res.status === 401 ? 'Identifiants invalides' : (data.error || 'Connexion impossible'));
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -81,6 +82,11 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads || []);
+      } else if (res.status === 401 || res.status === 503) {
+        // Session expirée ou admin désactivé : retour à l'écran de connexion
+        localStorage.removeItem('adminToken');
+        setIsAuthenticated(false);
+        setToken(null);
       }
     } catch (error) {
       console.error('Error loading leads:', error);
@@ -216,7 +222,7 @@ export default function AdminPage() {
   const exportToCSV = () => {
     const headers = [
       'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Raison', 'Adresse', 'Type', 'Surface (m²)',
-      'Prix Estimé (€)', 'Prix Conseillé (€)', 'Confiance (%)', 'Statut', 'Commentaires'
+      'Prix bas (€)', 'Prix estimé (€)', 'Confiance (%)', 'Statut', 'Commentaires'
     ];
     
     const rows = filteredLeads.map(lead => [
@@ -303,12 +309,12 @@ export default function AdminPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-ae-paper flex items-center justify-center p-4">
         <Card className="w-full max-w-md p-8">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <img 
-                src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
+                src="/brand/logo-alterego-noir.png" 
                 alt="AlterEgo" 
                 className="h-16 w-auto"
               />
@@ -358,13 +364,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-ae-paper">
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img 
-                src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
+                src="/brand/logo-alterego-noir.png" 
                 alt="AlterEgo" 
                 className="h-10 w-auto"
               />
@@ -533,7 +539,7 @@ export default function AdminPage() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Prix estimé:</span>
-                        <span className="font-bold">{lead.estimation.finalPrice.low.toLocaleString()} €</span>
+                        <span className="font-bold">{lead.estimation.finalPrice.mid.toLocaleString('fr-FR')} €</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Confiance:</span>
@@ -641,16 +647,16 @@ export default function AdminPage() {
 
                 {/* Estimation */}
                 {selectedLead.estimation?.finalPrice && (
-                  <Card className="p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+                  <Card className="p-6 bg-ae-ink text-ae-paper">
                     <h3 className="font-semibold mb-4 text-xl">Estimation</h3>
                     <div className="grid md:grid-cols-3 gap-4">
                       <div>
-                        <div className="text-sm opacity-80 mb-1">Prix Estimé</div>
-                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.low.toLocaleString()} €</div>
+                        <div className="text-sm opacity-80 mb-1">Prix estimé</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.mid.toLocaleString('fr-FR')} €</div>
                       </div>
                       <div>
-                        <div className="text-sm opacity-80 mb-1">Prix Conseillé</div>
-                        <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.mid.toLocaleString()} €</div>
+                        <div className="text-sm opacity-80 mb-1">Fourchette</div>
+                        <div className="text-lg font-bold">{selectedLead.estimation.finalPrice.low.toLocaleString('fr-FR')} – {selectedLead.estimation.finalPrice.high.toLocaleString('fr-FR')} €</div>
                       </div>
                       <div>
                         <div className="text-sm opacity-80 mb-1">Confiance</div>

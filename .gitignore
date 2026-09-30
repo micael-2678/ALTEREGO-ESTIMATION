@@ -86,3 +86,5 @@ public/dvf_sales.json
 .env
 *.env
 *.env.*
+
+!.env.example

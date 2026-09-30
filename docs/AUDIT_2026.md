@@ -23,7 +23,7 @@
 | Problème | Conséquence | Correction |
 |---|---|---|
 | Le front créait **2 leads par estimation** (avant et après le calcul) | Doublons dans l'admin et double synchro Brevo | 1 lead créé, puis l'estimation y est rattachée via `leadId` |
-| Scraping SeLoger avec Puppeteer à chaque estimation | 30 à 40 s d'attente, échec quasi systématique (anti-bot, sélecteurs obsolètes, code postal passé comme code INSEE), risque juridique | Désactivé par défaut (`MARKET_SCRAPING_ENABLED=true` pour le réactiver) : l'estimation est instantanée |
+| Scraping SeLoger avec Puppeteer à chaque estimation | 30 à 40 s d'attente, échec quasi systématique (anti-bot, sélecteurs obsolètes, code postal passé comme code INSEE), risque juridique | Supprimé (ainsi que Puppeteer et Chromium de l'image Docker) : l'estimation est instantanée |
 | Carte : annonces placées **au hasard** autour du bien | Information fausse | Retiré. La carte montre les vraies ventes DVF et le vrai rayon de recherche (au lieu d'un cercle fixe de 1 km) |
 | Ascenseur déduit de « nombre d'étages > 0 » | Ajustement étage faux pour la plupart des appartements | Question « Ascenseur oui/non » ajoutée |
 | Pénalité de dispersion jamais appliquée (`dvfStats.stdDev` au lieu de `dvfStats.stats.stdDev`) | Confiance surestimée dans les zones hétérogènes | Corrigé |
@@ -80,19 +80,60 @@ Deux options :
 | `FRAME_ANCESTORS` | Optionnel, sites autorisés à intégrer l'outil en iframe |
 | `NEXT_PUBLIC_MAIN_SITE_URL` | Lien « Retour au site » (défaut : https://alteregopatrimoine.com) |
 | `NEXT_PUBLIC_CONTACT_URL` | Lien du bouton « Prendre rendez-vous » (à pointer vers la page contact / prise de RDV) |
-| `MARKET_SCRAPING_ENABLED` | `true` pour réactiver le scraping SeLoger (déconseillé) |
+| `CALIBRATION_OFFSET` | Ajustement de prudence global (défaut `-0.08`), à recalibrer après réimport DVF |
+| `DVF_YEARS` | Années DVF importées (défaut : les 5 dernières) |
 
-## 5. Axes d'amélioration restants
+## 5. Deuxième passe
 
-1. **Modèle d'estimation**
-   - Ne plus plafonner artificiellement la confiance entre 65 et 90 : avec 1 comparable, afficher 65 % n'est pas honnête. Utiliser plutôt `confidenceIndex` déjà calculé par `dvf-enhanced.js`.
-   - Exploiter les données collectées mais ignorées : nombre de pièces, salles de bains, année de construction, surface de cave.
-   - Indexer les prix DVF anciens sur l'évolution du marché (indices Notaires-INSEE) au lieu de les traiter comme actuels.
-   - Ajouter un index géospatial MongoDB (`2dsphere`) et `$geoNear` pour remplacer la boîte englobante + filtre en JavaScript.
-   - Mettre en place un jeu de test (ventes réelles connues) pour mesurer l'erreur médiane à chaque modification des poids.
-2. **Nettoyage du dépôt** : ~25 fichiers `.md` de dépannage Dokploy/MongoDB à la racine, scripts Python de test Emergent, `package.json` nommé `nextjs-mongo-template`, ~40 composants shadcn non utilisés, dépendance `puppeteer` (image Docker très lourde) à retirer si le scraping reste désactivé.
-3. **Architecture de l'API** : le routeur unique `[[...path]]/route.js` gagnerait à être découpé en routes Next.js (`app/api/leads/route.js`…). Les routes `DELETE /api/admin/dvf/stats` et `/status` sont en réalité des lectures : à supprimer ou passer en `GET`.
-4. **Admin** : jeton stocké en `localStorage` (vulnérable en cas de XSS) → cookie `httpOnly` ; ajouter la pagination des leads.
-5. **RGPD** : le consentement mentionne « ses partenaires » : à faire valider (le consentement doit être spécifique, et les partenaires identifiables). Prévoir une politique de conservation des leads et des OTP (index TTL).
-6. **Tests automatisés** : aucun test JavaScript. Priorité : `dvf-adjustments.js` et `dvf-enhanced.js` (tests unitaires), puis un test Playwright du tunnel complet.
-7. **Limitation de débit** en mémoire : suffisante pour une seule instance ; passer à MongoDB/Redis si plusieurs conteneurs.
+### Qualité des données DVF (impact direct sur les prix)
+
+- **Ventes « en bloc »** : dans DVF, `valeur_fonciere` est le prix de toute la vente, répété
+  sur chaque lot. Une vente de 3 appartements pour 900 000 € produisait 3 comparables
+  à 900 000 € chacun. L'import regroupe désormais les lignes par mutation et ne garde
+  que les ventes d'un seul logement (cave ou parking acceptés).
+- Maisons sur plusieurs parcelles/cultures : dédoublonnées, surface de terrain additionnée.
+- VEFA (neuf), échanges, adjudications et ventes mixtes avec local commercial écartés.
+- L'import ne chargeait que **2024** alors que le code visait 5 ans et que la recherche
+  remonte jusqu'à 36 mois : il charge maintenant les 5 dernières années publiées.
+- Un département n'est plus vidé si le téléchargement échoue.
+- Noms de rue affichés en casse normale, sans le faux numéro « XX ».
+
+**À faire après déploiement : relancer l'import DVF** (`node scripts/ingest-all-france.js`
+ou depuis `/admin/dvf`), puis revoir `CALIBRATION_OFFSET`. Le -8 % appliqué à toutes les
+estimations servait probablement à compenser la surévaluation due aux ventes en bloc.
+
+### Modèle
+
+- Fiabilité : plancher abaissé de 65 à 30, pénalité quand il y a moins de 6 ventes,
+  fourchette élargie à ±13 % quand la fiabilité est faible. Un seul indicateur à l'écran
+  (l'avertissement suit la fiabilité affichée).
+- Le détail du calcul affiche l'ajustement de prudence et signale les plafonnements :
+  les pourcentages affichés expliquent enfin le prix retenu.
+
+### Sécurité et dépôt
+
+- **Secrets publiés dans le dépôt** : mot de passe MongoDB de production, mot de passe
+  admin et exemples de `JWT_SECRET` figuraient dans ~15 fichiers de documentation et dans
+  `docker-compose.yml`. Fichiers supprimés, valeurs par défaut retirées du compose ;
+  l'API refuse ces anciennes valeurs. **Ils restent dans l'historique git : il faut les
+  changer.**
+- Index MongoDB créés automatiquement (TTL sur les codes OTP, unicité des leads).
+- Admin : charte, logo local, retour à l'écran de connexion si la session expire, prix
+  estimé (et non fourchette basse) dans la liste, l'export CSV et la fiche lead.
+- Dépendances inutilisées retirées (`puppeteer`, `cheerio`, `axios`, `bcryptjs`),
+  package renommé, `README.md` et `.env.example` réécrits.
+- 17 tests unitaires (`yarn test`) et CI GitHub Actions (tests + build) sur chaque PR.
+
+## 6. Axes d'amélioration restants
+
+1. **Modèle** : indexer les prix anciens sur l'évolution du marché (indices
+   Notaires-INSEE) ; exploiter nombre de pièces et année de construction ; constituer un
+   jeu de ventes connues pour mesurer l'erreur médiane et recalibrer les poids.
+2. **Recherche géographique** : index `2dsphere` + `$geoNear` au lieu de la boîte englobante.
+3. **Architecture de l'API** : découper `[[...path]]/route.js` en routes Next.js ; supprimer
+   les routes `DELETE` qui sont en réalité des lectures.
+4. **Admin** : jeton en `localStorage` → cookie `httpOnly` ; pagination des leads.
+5. **RGPD** : faire valider la mention « ses partenaires » du consentement ; définir une
+   durée de conservation des leads.
+6. **Tests** : ajouter un test Playwright du tunnel complet dans la CI.
+7. **Limitation de débit** en mémoire : suffisante pour une seule instance.

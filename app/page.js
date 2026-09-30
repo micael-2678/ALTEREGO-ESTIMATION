@@ -949,9 +949,9 @@ function ErrorMessage({ children }) {
 }
 
 function Results({ results, formData, onReset }) {
-  const { finalPrice, adjustments, dvf, market } = results;
+  const { finalPrice, adjustments, dvf } = results;
   const confidence = finalPrice?.confidence ?? 0;
-  const confidenceLabel = confidence >= 80 ? 'Élevée' : confidence >= 70 ? 'Bonne' : 'Modérée';
+  const confidenceLabel = confidence >= 80 ? 'Élevée' : confidence >= 70 ? 'Bonne' : confidence >= 55 ? 'Moyenne' : 'Faible';
 
   return (
     <div>
@@ -1044,6 +1044,24 @@ function Results({ results, formData, onReset }) {
                 </li>
               ))}
             </ul>
+            {adjustments.offsetApplied ? (
+              <div className="flex justify-between items-center gap-4 py-3 border-b border-ae-line">
+                <div>
+                  <p className="font-medium">Ajustement de prudence</p>
+                  <p className="text-sm text-ae-muted">Appliqué à toutes nos estimations en ligne</p>
+                </div>
+                <span className="font-semibold tabular-nums text-ae-brique">
+                  {adjustments.offsetApplied > 0 ? '+' : ''}{adjustments.offsetApplied.toFixed(1)} %
+                </span>
+              </div>
+            ) : null}
+            {(adjustments.clampApplied || adjustments.adjustments.reduce((sum, a) => sum + a.impact, 0).toFixed(1) !== (adjustments.totalImpact * 100).toFixed(1)) && (
+              <p className="text-sm text-ae-muted pt-3">
+                {adjustments.clampApplied
+                  ? 'Peu de ventes comparables : l\'écart avec le prix du quartier a été limité par prudence.'
+                  : 'Le cumul des ajustements est plafonné pour rester proche du marché local.'}
+              </p>
+            )}
             <div className="flex justify-between items-baseline pt-4">
               <span className="font-semibold">Prix retenu pour votre bien</span>
               <span className="font-display text-lg">{formatEuros(adjustments.adjustedPricePerM2)}/m²</span>
@@ -1090,22 +1108,6 @@ function Results({ results, formData, onReset }) {
               radius={dvf.radius}
               dvfSales={dvf.comparables}
             />
-          </div>
-        </section>
-      )}
-
-      {market?.listings?.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
-          <div className="ae-card p-6 sm:p-8">
-            <h2 className="ae-h3 mb-4">Biens actuellement en vente</h2>
-            <ul className="divide-y divide-ae-line">
-              {market.listings.slice(0, 6).map(listing => (
-                <li key={listing.url} className="py-3 flex justify-between gap-4">
-                  <a href={listing.url} target="_blank" rel="noopener noreferrer" className="font-medium hover:text-ae-brique truncate">{listing.title}</a>
-                  <span className="tabular-nums shrink-0">{formatEuros(listing.price)}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </section>
       )}
