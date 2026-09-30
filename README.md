@@ -15,6 +15,8 @@ yarn install
 cp .env.example .env   # puis compléter les valeurs
 yarn dev               # http://localhost:3000
 yarn test              # tests unitaires du moteur d'estimation et de l'import DVF
+yarn build && yarn test:api   # tests d'intégration de l'API (MongoDB local requis, base alterego_test vidée)
+yarn test:e2e          # parcours complet dans un navigateur (après yarn build)
 ```
 
 ## Charger les données DVF
@@ -68,7 +70,9 @@ l'administration est désactivée.
 | Dossier | Contenu |
 |---|---|
 | `app/page.js` | Tunnel d'estimation (charte AlterEgo 2026) |
-| `app/api/[[...path]]/route.js` | API : géocodage, OTP, leads, estimation, admin |
+| `app/api/*/route.js` | Une route par fichier : `estimate`, `leads`, `verification/*`, `auth/*`, `admin/*`, `geo/resolve`, `dvf/comparables` |
+| `lib/server/` | Logique partagée des routes : estimation, leads, envoi des codes SMS |
+| `lib/api-helpers.js` | Réponses JSON, CORS, session admin, limitation de débit |
 | `lib/dvf-enhanced.js` | Recherche adaptative des ventes comparables |
 | `lib/dvf-adjustments.js` | Ajustements (étage, DPE, vue…), confiance et fourchette |
 | `lib/config-adjustments.js` | **Tous les réglages du modèle** (poids, bornes, calibrage) |
