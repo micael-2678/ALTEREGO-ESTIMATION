@@ -8,6 +8,11 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +31,10 @@ jobs:
         run: yarn build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+      - name: Tests d'intégration de l'API (MongoDB réel)
+        run: yarn test:api
+        env:
+          MONGO_URL: mongodb://127.0.0.1:27017
       - name: Navigateur de test
         run: npx playwright install --with-deps chromium
       - name: Tests de bout en bout

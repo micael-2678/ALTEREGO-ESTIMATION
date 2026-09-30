@@ -1,51 +1,26 @@
-import { NextResponse } from 'next/server';
-import { getDVFStats, startDVFIngestion, getIngestionState, clearDVFData } from '../../../../lib/dvf-admin';
-import { json, serverError, corsHeadersFor, requireAdmin } from '../../../../lib/api-helpers';
+import { json, preflight, adminHandler } from '@/lib/api-helpers';
+import { getDVFStats, startDVFIngestion, getIngestionState, clearDVFData } from '@/lib/dvf-admin';
 
-export async function OPTIONS(request) {
-  return new NextResponse(null, { status: 204, headers: corsHeadersFor(request) });
-}
+export const OPTIONS = preflight;
 
-// GET - Statistiques et statut
-export async function GET(request) {
-  const denied = requireAdmin(request);
-  if (denied) return denied;
-
+// GET ?action=stats|status : statistiques et progression de l'import
+export const GET = adminHandler(async (request) => {
   const action = new URL(request.url).searchParams.get('action');
+  if (action === 'stats' || !action) return json(request, await getDVFStats());
+  if (action === 'status') return json(request, getIngestionState());
+  return json(request, { error: 'Invalid action' }, 400);
+});
 
-  try {
-    if (action === 'stats' || !action) {
-      return json(request, await getDVFStats());
-    }
-    if (action === 'status') {
-      return json(request, getIngestionState());
-    }
-    return json(request, { error: 'Invalid action' }, 400);
-  } catch (error) {
-    return serverError(request, error);
-  }
-}
-
-// POST - Actions (start, clear)
-export async function POST(request) {
-  const denied = requireAdmin(request);
-  if (denied) return denied;
-
+// POST ?action=start|clear : lancer l'import complet ou vider les données
+export const POST = adminHandler(async (request) => {
   const action = new URL(request.url).searchParams.get('action');
-
-  try {
-    if (action === 'start') {
-      try {
-        return json(request, await startDVFIngestion());
-      } catch (error) {
-        return json(request, { error: error.message }, 400);
-      }
+  if (action === 'start') {
+    try {
+      return json(request, await startDVFIngestion());
+    } catch (error) {
+      return json(request, { error: error.message }, 400);
     }
-    if (action === 'clear') {
-      return json(request, await clearDVFData());
-    }
-    return json(request, { error: 'Invalid action' }, 400);
-  } catch (error) {
-    return serverError(request, error);
   }
-}
+  if (action === 'clear') return json(request, await clearDVFData());
+  return json(request, { error: 'Invalid action' }, 400);
+});

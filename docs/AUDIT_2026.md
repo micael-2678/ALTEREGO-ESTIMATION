@@ -168,12 +168,22 @@ Reproduit localement (Docker 29 + Traefik + réseau `dokploy-network`) :
 - Parcours complet testé sur une vraie base MongoDB derrière Traefik (vérification SMS,
   lead unique, champs injectés ignorés, index, session admin par cookie).
 
-## 8. Axes d'amélioration restants
+## 8. Cinquième passe
+
+- **API découpée** : le routeur unique de 650 lignes (`[[...path]]/route.js`) est remplacé
+  par une route Next.js par fichier (`app/api/estimate/route.js`, `app/api/leads/route.js`…)
+  et une logique partagée dans `lib/server/`. Erreurs et accès admin gérés par
+  `handler()` / `adminHandler()`. Les routes inconnues répondent toujours en JSON.
+- **Tests d'intégration de l'API** (`yarn test:api`) contre un vrai serveur et une vraie
+  base MongoDB : validation, CORS, estimation, vérification SMS, lead unique, admin par
+  cookie. Écrits avant le découpage pour garantir un comportement identique, et exécutés
+  par la CI avec un service MongoDB.
+
+## 9. Axes d'amélioration restants
 
 1. **Modèle** : exploiter nombre de pièces et année de construction une fois le
    recalibrage fait sur les vraies données.
 2. **Recherche géographique** : index `2dsphere` + `$geoNear` au lieu de la boîte englobante.
-3. **Architecture de l'API** : découper `[[...path]]/route.js` en routes Next.js.
 4. **RGPD** : faire valider la mention « ses partenaires » du consentement ; définir une
    durée de conservation des leads.
 5. **Déploiement sans coupure** : passer en mode Stack (Swarm) avec `update_config.order:

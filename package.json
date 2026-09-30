@@ -12,7 +12,8 @@
         "ingest:dvf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ingest-dvf.js",
         "test:e2e": "playwright test",
         "postbuild": "cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/",
-        "backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/backtest.js"
+        "backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/backtest.js",
+        "test:api": "sh tests/api/run.sh"
     },
     "dependencies": {
         "@radix-ui/react-dialog": "^1.1.14",
