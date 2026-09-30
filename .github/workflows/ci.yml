@@ -17,6 +17,11 @@ jobs:
       - run: yarn install --frozen-lockfile
       - name: Tests unitaires
         run: yarn test
+      - name: Configuration Docker Compose / Traefik
+        run: |
+          docker compose -f docker-compose.yml config -q
+          # Les étiquettes Traefik doivent être lues par "docker compose up" (pas sous deploy:)
+          docker compose -f docker-compose.yml config --format json | jq -e '.services.app.labels["traefik.enable"] == "true"'
       - name: Build
         run: yarn build
         env:

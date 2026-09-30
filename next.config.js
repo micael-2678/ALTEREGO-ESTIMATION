@@ -3,7 +3,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ['mongodb'],
+  // Gardés hors du bundle : ils sont ainsi copiés dans l'image et utilisables par
+  // les scripts d'import DVF lancés dans le conteneur (node scripts/ingest-dvf.js)
+  serverExternalPackages: ['mongodb', 'csv-parse'],
   webpack(config, { dev }) {
     if (dev) {
       // Reduce CPU/memory from file watching

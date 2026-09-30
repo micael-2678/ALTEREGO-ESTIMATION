@@ -139,14 +139,42 @@ estimations servait probablement à compenser la surévaluation due aux ventes e
 - Tests de bout en bout Playwright (tunnel complet sur ordinateur et mobile, mode intégré,
   admin) exécutés par la CI à chaque pull request.
 
-## 7. Axes d'amélioration restants
+## 7. Quatrième passe
 
-1. **Modèle** : indexer les prix anciens sur l'évolution du marché (indices
-   Notaires-INSEE) ; exploiter nombre de pièces et année de construction ; constituer un
-   jeu de ventes connues pour mesurer l'erreur médiane et recalibrer les poids.
+### « 404 page not found » de Traefik à chaque déploiement
+
+Reproduit localement (Docker 29 + Traefik + réseau `dokploy-network`) :
+
+- **Cause 1 (dans le dépôt, corrigée)** : les étiquettes Traefik de `docker-compose.yml`
+  étaient sous `deploy.labels`, lues uniquement en mode Swarm. Avec `docker compose up`,
+  le conteneur démarrait sans aucune étiquette Traefik → 404 en HTTP comme en HTTPS.
+  De plus, le routeur unique `web,websecure` + TLS ne pouvait jamais répondre en HTTP.
+  Désormais : étiquettes au niveau du service, un routeur HTTPS et une redirection HTTP.
+  Vérifié : HTTPS 200, HTTP 301 vers HTTPS, et un redéploiement ne coûte qu'une requête.
+- **Cause 2 (sur le serveur, à vérifier)** : Traefik < 3.6 ne sait plus dialoguer avec
+  Docker 29+ (« client version 1.24 is too old ») et répond 404 à tout, même avec une
+  configuration correcte. Reproduit avec Traefik 3.3. Correctif : mettre Traefik à jour.
+- La CI vérifie maintenant la configuration Compose et la présence des étiquettes.
+
+### Autres corrections
+
+- Scripts d'import DVF inutilisables dans l'image de production (`csv-parse` absent) :
+  corrigé, vérifié dans le conteneur.
+- **Évolution des prix dans le temps** : la tendance du quartier (ventes du même type
+  dans 1 km sur 4 ans) est estimée par régression et chaque vente est ramenée à sa valeur
+  d'aujourd'hui (seulement si la tendance est statistiquement nette, bornée à ±15 %/an).
+- **Outil de recalibrage** `yarn backtest` : rejoue des ventes réelles à leur date, mesure
+  l'erreur et recommande `CALIBRATION_OFFSET`.
+- Parcours complet testé sur une vraie base MongoDB derrière Traefik (vérification SMS,
+  lead unique, champs injectés ignorés, index, session admin par cookie).
+
+## 8. Axes d'amélioration restants
+
+1. **Modèle** : exploiter nombre de pièces et année de construction une fois le
+   recalibrage fait sur les vraies données.
 2. **Recherche géographique** : index `2dsphere` + `$geoNear` au lieu de la boîte englobante.
 3. **Architecture de l'API** : découper `[[...path]]/route.js` en routes Next.js.
-4. **Admin** : pagination côté serveur au-delà de 2 000 leads.
-5. **RGPD** : faire valider la mention « ses partenaires » du consentement ; définir une
+4. **RGPD** : faire valider la mention « ses partenaires » du consentement ; définir une
    durée de conservation des leads.
-6. **Limitation de débit** en mémoire : suffisante pour une seule instance.
+5. **Déploiement sans coupure** : passer en mode Stack (Swarm) avec `update_config.order:
+   start-first` si même une seconde d'interruption est gênante.
