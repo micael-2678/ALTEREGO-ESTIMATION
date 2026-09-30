@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Home, Building2, MapPin, ArrowRight, ArrowLeft, Loader2, RotateCcw, Check, ShieldCheck, Clock, LineChart } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp';
 import dynamic from 'next/dynamic';
+import SiteFooter from '@/components/SiteFooter';
+import { LEGAL, CONSENT_TEXTS } from '@/lib/legal';
 
 const EstimationMap = dynamic(() => import('@/components/EstimationMap'), {
   ssr: false,
@@ -51,7 +53,8 @@ const INITIAL_LEAD = {
   email: '',
   phone: '',
   estimationReason: '',
-  consent: false
+  consent: false,
+  marketingConsent: false
 };
 
 const STANDING_LEVELS = [
@@ -747,14 +750,19 @@ export default function App() {
                     </div>
                   </fieldset>
 
-                  <label htmlFor="consent" className="flex items-start gap-3 p-4 rounded-2xl bg-ae-sand cursor-pointer">
-                    <input id="consent" type="checkbox" className="ae-checkbox mt-0.5"
-                      checked={leadForm.consent} onChange={(e) => updateLead({ consent: e.target.checked })} />
-                    <span className="text-sm text-ae-muted leading-relaxed">
-                      J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée
-                      et bénéficier d'un accompagnement personnalisé dans mon projet immobilier. *
-                    </span>
-                  </label>
+                  <div className="space-y-3">
+                    <label htmlFor="consent" className="flex items-start gap-3 p-4 rounded-2xl bg-ae-sand cursor-pointer">
+                      <input id="consent" type="checkbox" className="ae-checkbox mt-0.5"
+                        checked={leadForm.consent} onChange={(e) => updateLead({ consent: e.target.checked })} />
+                      <span className="text-sm text-ae-muted leading-relaxed">{CONSENT_TEXTS.service} *</span>
+                    </label>
+                    {/* Prospection commerciale : consentement distinct et facultatif (RGPD, CPCE L34-5) */}
+                    <label htmlFor="marketingConsent" className="flex items-start gap-3 px-4 cursor-pointer">
+                      <input id="marketingConsent" type="checkbox" className="ae-checkbox mt-0.5"
+                        checked={leadForm.marketingConsent} onChange={(e) => updateLead({ marketingConsent: e.target.checked })} />
+                      <span className="text-sm text-ae-muted leading-relaxed">{CONSENT_TEXTS.marketing} (facultatif)</span>
+                    </label>
+                  </div>
 
                   {otpError && <ErrorMessage>{otpError}</ErrorMessage>}
 
@@ -763,6 +771,16 @@ export default function App() {
                       ? <><Loader2 className="w-5 h-5 animate-spin" /> Envoi du code…</>
                       : <>Recevoir mon estimation <ArrowRight className="w-5 h-5" /></>}
                   </button>
+
+                  <p className="text-xs text-ae-muted leading-relaxed">
+                    Vos données sont traitées par {LEGAL.companyName} pour réaliser votre estimation et vous recontacter.
+                    Le numéro de téléphone est vérifié par SMS (Brevo) afin d'éviter les demandes frauduleuses. Vos données
+                    sont conservées {Math.round(LEGAL.leadRetentionMonths / 12)} ans au plus après notre dernier échange et ne sont
+                    jamais vendues. Vous pouvez y accéder, les rectifier ou les faire supprimer à tout moment.{' '}
+                    <a href="/confidentialite" target="_blank" className="underline underline-offset-2 hover:text-ae-brique">
+                      Politique de confidentialité
+                    </a>
+                  </p>
                 </form>
               )}
 
@@ -867,15 +885,7 @@ export default function App() {
       </main>
 
       {!embedded && (
-        <footer className="bg-ae-ink text-ae-paper">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row gap-6 sm:items-center sm:justify-between">
-            <img src="/brand/logo-alterego-blanc.png" alt="AlterEgo" className="h-10 w-auto self-start" />
-            <div className="text-sm text-ae-paper/70 sm:text-right space-y-1">
-              <p>© {new Date().getFullYear()} AlterEgo Patrimoine. Tous droits réservés.</p>
-              <p>Estimations basées sur DVF (open data) — valeurs indicatives, non contractuelles.</p>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       )}
     </div>
   );

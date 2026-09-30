@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { json, preflight, handler, adminHandler, readJson } from '@/lib/api-helpers';
 import { getCollection } from '@/lib/mongodb';
+import { LEGAL, CONSENT_TEXTS } from '@/lib/legal';
 import {
   ESTIMATION_REASONS,
   ensureIndexes,
@@ -51,6 +52,14 @@ export const POST = handler(async (request) => {
     estimationReason: body.estimationReason,
     consent: true,
     consentAt: new Date().toISOString(),
+    marketingConsent: body.marketingConsent === true,
+    // Preuve du consentement (art. 7 RGPD) : textes exacts présentés et version
+    consentRecord: {
+      version: LEGAL.consentVersion,
+      service: CONSENT_TEXTS.service,
+      marketing: body.marketingConsent === true ? CONSENT_TEXTS.marketing : null,
+      at: new Date().toISOString()
+    },
     phoneVerified: true,
     property: sanitizeProperty(body.property),
     status: 'pending_estimation',

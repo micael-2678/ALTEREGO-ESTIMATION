@@ -13,7 +13,8 @@
         "test:e2e": "playwright test",
         "postbuild": "cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/",
         "backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/backtest.js",
-        "test:api": "sh tests/api/run.sh"
+        "test:api": "sh tests/api/run.sh",
+        "purge:leads": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/purge-leads.js"
     },
     "dependencies": {
         "@radix-ui/react-dialog": "^1.1.14",

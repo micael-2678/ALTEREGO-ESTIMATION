@@ -60,6 +60,22 @@ médiane, la part d'estimations à ±10 % et le `CALIBRATION_OFFSET` recommandé
 Les scripts d'import DVF fonctionnent dans le conteneur :
 `docker exec -it <conteneur> node scripts/ingest-dvf.js 75`.
 
+## RGPD et mentions légales
+
+- **À compléter avant mise en ligne** : `lib/legal.js` (forme juridique, siège, RCS, directeur de
+  la publication, email de contact RGPD). Tant qu'un champ manque, les pages légales affichent
+  « [à compléter] » et l'admin le signale (`/admin/dvf`, État du service).
+- Pages : `/confidentialite` (politique de confidentialité, cookies) et `/mentions-legales`.
+- Formulaire : consentement au traitement de la demande (obligatoire) et consentement à la
+  prospection par email (facultatif, décoché). Le texte exact et sa version sont enregistrés
+  avec chaque lead. Brevo n'inscrit un contact dans les listes de prospection (4 et 5) que
+  s'il a coché la case facultative.
+- Cookies : Google Tag Manager et Google Ads ne sont chargés qu'après « Tout accepter ». Le
+  choix est redemandé au bout de 6 mois et modifiable via « Gérer les cookies ». En mode
+  intégré (`?embed=1`), aucun traceur n'est chargé : le site parent reçoit l'événement
+  `alterego-estimation:step` (étape 7 = estimation affichée) pour ses propres conversions.
+- Conservation : 36 mois après le dernier échange. Purge mensuelle : `yarn purge:leads --apply`.
+
 ## Configuration
 
 Voir `.env.example`. Sans `JWT_SECRET`, `ADMIN_USERNAME` et `ADMIN_PASSWORD`,
