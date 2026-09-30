@@ -5,6 +5,11 @@ services:
       context: .
       dockerfile: Dockerfile
     # Pas de "ports:" : Traefik joint le conteneur par le réseau dokploy-network
+    # Toutes les variables définies dans Dokploy (écrites dans .env) sont transmises
+    # au conteneur, y compris celles qui ne sont pas listées ci-dessous
+    env_file:
+      - path: .env
+        required: false
     environment:
       - NODE_ENV=production
       # Next.js standalone doit écouter sur toutes les interfaces du conteneur
@@ -17,6 +22,10 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - BREVO_API_KEY=${BREVO_API_KEY}
+      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME:-AlterEgo}
+      # Numéros (séparés par des virgules) dispensés de vérification SMS
+      - BYPASS_PHONE_NUMBER=${BYPASS_PHONE_NUMBER:-}
+      - MAX_OTP_ATTEMPTS=${MAX_OTP_ATTEMPTS:-5}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - FRAME_ANCESTORS=${FRAME_ANCESTORS:-}
       - CALIBRATION_OFFSET=${CALIBRATION_OFFSET:-}

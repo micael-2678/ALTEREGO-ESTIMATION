@@ -6,6 +6,7 @@ export default function DVFAdminPage() {
   const [stats, setStats] = useState({ total: 0, byType: {} });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [health, setHealth] = useState(null);
 
   useEffect(() => {
     fetch('/api/auth/session').then(res => {
@@ -14,6 +15,7 @@ export default function DVFAdminPage() {
         return;
       }
       loadStats();
+      loadHealth();
     });
   }, []);
 
@@ -24,6 +26,15 @@ export default function DVFAdminPage() {
         const data = await res.json();
         setStats(data);
       }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadHealth = async () => {
+    try {
+      const res = await fetch('/api/admin/health');
+      if (res.ok) setHealth(await res.json());
     } catch (err) {
       console.error(err);
     }
@@ -151,6 +162,29 @@ export default function DVFAdminPage() {
           </div>
         </div>
 
+        {/* État du service */}
+        {health && (
+          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>État du service</h2>
+            {[
+              ['Base DVF', health.database],
+              ['Envoi des SMS (Brevo)', health.sms],
+              ['Numéros sans vérification', health.bypass]
+            ].map(([label, item]) => (
+              <div key={label} style={{ display: 'flex', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ color: item.ok ? '#16a34a' : '#B94E33', fontWeight: 700 }}>{item.ok ? '✓' : '✗'}</span>
+                <span style={{ fontWeight: 600, minWidth: '14rem' }}>{label}</span>
+                <span style={{ color: '#4A4740' }}>{item.message}</span>
+              </div>
+            ))}
+            {health.sms.lastFailure && (
+              <p style={{ marginTop: '0.75rem', color: '#B94E33', fontSize: '0.875rem' }}>
+                Dernier échec d'envoi de SMS ({new Date(health.sms.lastFailure.at).toLocaleString('fr-FR')}) : {health.sms.lastFailure.reason}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Actions</h2>
@@ -218,10 +252,9 @@ export default function DVFAdminPage() {
             ℹ️ Informations
           </h3>
           <ul style={{ marginLeft: '1.5rem', color: '#1e3a8a', lineHeight: '1.6' }}>
-            <li>Le chargement télécharge ~900 000 transactions depuis data.gouv.fr</li>
-            <li>Durée estimée : 15-30 minutes</li>
-            <li>Les données sont mises à jour automatiquement (5 dernières années)</li>
-            <li>Une fois chargées, les estimations fonctionneront immédiatement</li>
+            <li>Le chargement télécharge les 5 dernières années de ventes DVF depuis data.gouv.fr</li>
+            <li>Durée : plusieurs heures pour toute la France</li>
+                        <li>Une fois chargées, les estimations fonctionneront immédiatement</li>
           </ul>
         </div>
 

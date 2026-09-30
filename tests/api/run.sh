@@ -7,6 +7,8 @@ export DB_NAME="${DB_NAME:-alterego_test}"
 export JWT_SECRET="${JWT_SECRET:-api-test-secret-0123456789abcdef}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-Test-Admin-2026!}"
+export BYPASS_PHONE_NUMBER="${BYPASS_PHONE_NUMBER:-0698793430}"
+unset BREVO_API_KEY
 export PORT=3200 HOSTNAME=127.0.0.1 NODE_ENV=production
 
 node .next/standalone/server.js > /tmp/alterego-api-test.log 2>&1 &

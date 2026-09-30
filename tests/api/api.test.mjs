@@ -153,7 +153,25 @@ test('lead : vérification SMS obligatoire, un seul lead, champs injectés ignor
   assert.notEqual(leads[0].property.type, 'maison');
 });
 
+test('numéro dispensé : ni SMS ni code, lead et estimation directs', async () => {
+  const sent = await api('POST', '/api/verification/send-otp', { body: { phone: '06 98 79 34 30' } });
+  assert.equal(sent.status, 200);
+  assert.equal(sent.data.bypass, true);
+
+  const lead = await api('POST', '/api/leads', {
+    body: { name: 'Micael Test', email: 'contact@example.fr', phone: '0698793430', estimationReason: 'Acheter', consent: true }
+  });
+  assert.equal(lead.status, 200);
+  await db.collection('leads').deleteOne({ id: lead.data.leadId });
+});
+
+test('numéro non dispensé : sans clé Brevo, échec explicite côté admin', async () => {
+  const sent = await api('POST', '/api/verification/send-otp', { body: { phone: '0622334455' } });
+  assert.equal(sent.status, 500);
+});
+
 test('admin : accès refusé sans session', async () => {
+  assert.equal((await api('GET', '/api/admin/health')).status, 401);
   assert.equal((await api('GET', '/api/leads')).status, 401);
   assert.equal((await api('GET', '/api/auth/session')).status, 401);
   assert.equal((await api('POST', '/api/admin/leads/update', { body: { leadId: 'x', status: 'contacted' } })).status, 401);
@@ -195,6 +213,14 @@ test('admin : connexion par cookie httpOnly et gestion des leads', async () => {
   const status = await api('GET', '/api/admin/dvf/status', { cookie: adminCookie });
   assert.equal(status.status, 200);
   assert.equal(status.data.total, 1500);
+
+  const health = await api('GET', '/api/admin/health', { cookie: adminCookie });
+  assert.equal(health.status, 200);
+  assert.equal(health.data.database.ok, true);
+  assert.equal(health.data.sms.ok, false);
+  assert.match(health.data.sms.message, /BREVO_API_KEY absente/);
+  assert.match(health.data.sms.lastFailure.reason, /BREVO_API_KEY absente/);
+  assert.equal(health.data.bypass.count, 1);
 
   assert.equal((await api('DELETE', `/api/admin/leads/delete?leadId=${lead.id}`, { cookie: adminCookie })).status, 200);
   assert.equal(await db.collection('leads').countDocuments(), 0);
