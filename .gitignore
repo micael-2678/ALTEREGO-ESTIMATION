@@ -86,3 +86,9 @@ public/dvf_sales.json
 .env
 *.env
 *.env.*
+
+!.env.example
+
+# Playwright
+/test-results/
+/playwright-report/

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Application Next.js
   app:
@@ -13,10 +11,14 @@ services:
       - MONGO_URL=${MONGO_URL:-mongodb://mongodb:27017/alterego_db}
       - DB_NAME=${DB_NAME:-alterego_db}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-Micael}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Micael123}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Pas de valeur par défaut : sans ces variables, l'admin reste désactivé
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - BREVO_API_KEY=${BREVO_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - FRAME_ANCESTORS=${FRAME_ANCESTORS:-}
+      - CALIBRATION_OFFSET=${CALIBRATION_OFFSET:-}
     restart: unless-stopped
     networks:
       - dokploy-network
