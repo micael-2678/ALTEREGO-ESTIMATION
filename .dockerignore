@@ -17,7 +17,10 @@ coverage
 *.test.js
 *.test.ts
 
-# Environnement local
+# Environnement (les secrets sont fournis par Dokploy, jamais copiés dans l'image)
+.env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -52,10 +55,11 @@ README*.md
 docs/
 *.md
 
-# Scripts de développement
-scripts/ingest-all-france.js
-scripts/retry-failed.js
-scripts/populate-dvf-sample.js
+# Tests
+tests/
+test-results/
+playwright-report/
+playwright.config.mjs
 
 # Fichiers temporaires DVF
 /tmp/

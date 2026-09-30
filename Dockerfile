@@ -1,5 +1,5 @@
 # Multi-stage build optimisé pour Next.js standalone
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 
 # Copier les fichiers de dépendances
@@ -14,7 +14,7 @@ RUN \
   fi
 
 # Stage 2: Build de l'application
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copier les dépendances depuis deps
@@ -31,7 +31,7 @@ ENV NODE_ENV=production
 RUN yarn build
 
 # Stage 3: Production runner (image finale légère)
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

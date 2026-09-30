@@ -968,7 +968,7 @@ function Results({ results, formData, onReset }) {
       {finalPrice ? (
         <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
           <div className="rounded-card bg-ae-ink text-ae-paper p-6 sm:p-12">
-            <div className="grid lg:grid-cols-[1.4fr_1fr] gap-10 items-end">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-10 items-end">
               <div>
                 <p className="ae-eyebrow !text-ae-paper/60 mb-4">Valeur estimée</p>
                 <p className="font-display font-extrabold tracking-tight leading-none text-[clamp(2.75rem,7vw,5.5rem)]">
@@ -1022,7 +1022,7 @@ function Results({ results, formData, onReset }) {
         </div>
       )}
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 grid lg:grid-cols-2 gap-6 mb-8">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Détail des ajustements */}
         {adjustments?.adjustments?.length > 0 && (
           <section className="ae-card p-6 sm:p-8">
