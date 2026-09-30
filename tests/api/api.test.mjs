@@ -149,6 +149,11 @@ test('lead : vérification SMS obligatoire, un seul lead, champs injectés ignor
   assert.equal(leads[0].status, 'estimation_complete');
   assert.equal(leads[0].email, 'jean@test.fr');
   assert.equal(leads[0].property.evil, undefined);
+  // Preuve du consentement enregistrée ; prospection refusée par défaut
+  assert.equal(leads[0].marketingConsent, false);
+  assert.match(leads[0].consentRecord.service, /estimation/);
+  assert.equal(leads[0].consentRecord.marketing, null);
+  assert.ok(leads[0].consentRecord.version);
   assert.equal(leads[0].estimation.dvf.comparables.length > 0, true);
   assert.notEqual(leads[0].property.type, 'maison');
 });

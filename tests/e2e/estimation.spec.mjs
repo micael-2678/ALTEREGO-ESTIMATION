@@ -54,6 +54,7 @@ test('parcours complet : adresse → estimation, un seul lead', async ({ page })
   const calls = [];
   await mockApi(page, calls);
   await page.goto('/');
+  await page.getByRole('button', { name: 'Tout refuser' }).click();
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Combien vaut votre bien');
   await page.fill('#address', '2 rue des ital');
@@ -82,6 +83,9 @@ test('parcours complet : adresse → estimation, un seul lead', async ({ page })
   await page.fill('#email', 'jean@test.fr');
   await page.fill('#phone', '0612345678');
   await page.getByRole('button', { name: /Vendre/ }).click();
+  // Consentement à la prospection : case distincte, décochée par défaut
+  await expect(page.locator('#marketingConsent')).not.toBeChecked();
+  await expect(page.getByText(/partenaires/)).toHaveCount(0);
   await page.check('#consent');
   await page.getByRole('button', { name: /Recevoir mon estimation/ }).click();
 
@@ -132,4 +136,39 @@ test("admin : connexion puis liste des leads", async ({ page }) => {
   await expect(page.getByText('Jeanne Martin')).toBeVisible();
   // Le prix affiché est le prix estimé, pas le bas de fourchette
   await expect(page.getByText(/703.300 €/).first()).toBeVisible();
+});
+
+test('cookies : aucun traceur Google avant accord, refus aussi simple qu\'acceptation', async ({ page }) => {
+  const googleRequests = [];
+  page.on('request', r => { if (/googletagmanager\.com/.test(r.url())) googleRequests.push(r.url()); });
+  await page.route(/googletagmanager\.com/, r => r.abort());
+
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Tout refuser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tout accepter' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(googleRequests).toHaveLength(0);
+
+  // Refus : bandeau fermé, toujours aucun traceur, choix mémorisé
+  await page.getByRole('button', { name: 'Tout refuser' }).click();
+  await page.reload();
+  await page.waitForTimeout(500);
+  await expect(page.getByRole('button', { name: 'Tout refuser' })).toHaveCount(0);
+  expect(googleRequests).toHaveLength(0);
+
+  // Changement d'avis depuis le pied de page : acceptation → traceurs chargés
+  await page.getByRole('button', { name: 'Gérer les cookies' }).click();
+  await page.getByRole('button', { name: 'Tout accepter' }).click();
+  await expect.poll(() => googleRequests.length).toBeGreaterThan(0);
+});
+
+test('pages légales accessibles depuis le pied de page', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Tout refuser' }).click();
+  await page.getByRole('link', { name: 'Confidentialité' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Politique de confidentialité');
+  await expect(page.locator('#cookies')).toBeVisible();
+  await expect(page.getByText('www.cnil.fr/fr/plaintes')).toBeVisible();
+  await page.goto('/mentions-legales');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mentions légales');
 });

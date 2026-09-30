@@ -1,5 +1,5 @@
 import {
-  json, preflight, handler, readJson, adminCookie, signAdminToken, getJwtSecret, safeEqual, rateLimit, clientIp
+  json, preflight, handler, readJson, adminCookie, signAdminToken, adminConfigProblems, safeEqual, rateLimit, clientIp
 } from '@/lib/api-helpers';
 
 export const OPTIONS = preflight;
@@ -13,8 +13,10 @@ export const POST = handler(async (request) => {
   const expectedUser = process.env.ADMIN_USERNAME;
   const expectedPassword = process.env.ADMIN_PASSWORD;
 
-  if (!expectedUser || !expectedPassword || !getJwtSecret()) {
-    return json(request, { error: 'Admin login is not configured' }, 503);
+  // Indique précisément le réglage à corriger dans Dokploy (sans jamais afficher de valeur)
+  const problems = adminConfigProblems();
+  if (problems.length > 0) {
+    return json(request, { error: `Connexion admin non configurée sur le serveur : ${problems.join(' ; ')}.` }, 503);
   }
   if (COMPROMISED_PASSWORDS.includes(expectedPassword)) {
     return json(request, { error: 'ADMIN_PASSWORD compromis : définissez un nouveau mot de passe administrateur' }, 503);
