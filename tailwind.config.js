@@ -17,7 +17,22 @@ module.exports = {
     		}
     	},
     	extend: {
+    		fontFamily: {
+    			display: ['"Bricolage Grotesque"', '"Instrument Sans"', 'Arial', 'sans-serif'],
+    			sans: ['"Instrument Sans"', '"Helvetica Neue"', 'Arial', 'sans-serif']
+    		},
     		colors: {
+    			// Charte AlterEgo 2026
+    			ae: {
+    				ink: '#141413',
+    				paper: '#FBF8F3',
+    				white: '#FFFFFF',
+    				sand: '#EFE9DF',
+    				line: '#DDD6CA',
+    				brique: '#B94E33',
+    				sauge: '#DCE3D5',
+    				muted: '#4A4740'
+    			},
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',
     			ring: 'hsl(var(--ring))',
@@ -70,6 +85,7 @@ module.exports = {
     			}
     		},
     		borderRadius: {
+    			card: '22px',
     			lg: 'var(--radius)',
     			md: 'calc(var(--radius) - 2px)',
     			sm: 'calc(var(--radius) - 4px)'

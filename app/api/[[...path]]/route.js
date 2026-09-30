@@ -1,251 +1,321 @@
-import { NextResponse } from 'next/server';
-import { connectToDatabase, getCollection } from '../../../lib/mongodb';
-import { getDVFComparables } from '../../../lib/dvf';
+import { getCollection } from '../../../lib/mongodb';
 import { getAdaptiveComparables } from '../../../lib/dvf-enhanced';
 import { calculateAdjustments, calculateAdjustedPrice } from '../../../lib/dvf-adjustments';
 import { ingestDVFDepartment } from '../../../lib/dvf-ingestion';
-import { scrapeSeLoger, calculateMarketStats } from '../../../lib/scraper';
 import { getDVFStats, startDVFIngestion, getIngestionState, clearDVFData } from '../../../lib/dvf-admin';
-import { 
-  generateOTP, 
-  normalizePhoneNumber, 
-  isValidFrenchPhone, 
+import {
+  generateOTP,
+  normalizePhoneNumber,
+  isValidFrenchPhone,
   shouldBypassVerification,
   sendOTPSMS,
   calculateExpirationTime,
   isOTPExpired
 } from '../../../lib/otp-service';
 import { createOrUpdateBrevoContact } from '../../../lib/brevo-contact-service';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import {
+  json,
+  serverError,
+  corsHeadersFor,
+  requireAdmin,
+  signAdminToken,
+  getJwtSecret,
+  safeEqual,
+  rateLimit,
+  clientIp
+} from '../../../lib/api-helpers';
+import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+// Durée pendant laquelle une vérification SMS permet de créer un lead
+const PHONE_VERIFICATION_VALIDITY_MS = 30 * 60 * 1000;
+const PROPERTY_TYPES = ['appartement', 'maison'];
+const ESTIMATION_REASONS = ['Acheter', 'Vendre'];
+const LEAD_STATUSES = ['pending_estimation', 'estimation_complete', 'contacted', 'qualified', 'closed_won', 'closed_lost'];
 
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+const DVF_SEARCH = {
+  initialRadiusMeters: 500,
+  maxRadiusMeters: 800,
+  months: 24,
+  maxMonths: 36,
+  minComparables: 8
 };
 
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders });
+export async function OPTIONS(request) {
+  return new NextResponse(null, { status: 204, headers: corsHeadersFor(request) });
+}
+
+async function readJson(request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
+
+function toNumber(value) {
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Valide les paramètres communs d'une recherche de comparables
+function parseEstimateParams({ lat, lng, type, surface }) {
+  const parsed = {
+    lat: toNumber(lat),
+    lng: toNumber(lng),
+    type,
+    surface: toNumber(surface)
+  };
+  if (parsed.lat === null || parsed.lng === null || Math.abs(parsed.lat) > 90 || Math.abs(parsed.lng) > 180) {
+    return { error: 'Invalid coordinates' };
+  }
+  if (!PROPERTY_TYPES.includes(parsed.type)) {
+    return { error: 'Invalid property type' };
+  }
+  if (parsed.surface === null || parsed.surface < 5 || parsed.surface > 5000) {
+    return { error: 'Invalid surface' };
+  }
+  return { params: parsed };
+}
+
+async function isPhoneRecentlyVerified(phone) {
+  if (shouldBypassVerification(phone)) return true;
+  const collection = await getCollection('otp_verifications');
+  const record = await collection.findOne({
+    phone: normalizePhoneNumber(phone),
+    verified: true,
+    verifiedAt: { $gte: new Date(Date.now() - PHONE_VERIFICATION_VALIDITY_MS) }
+  });
+  return !!record;
+}
+
+// Ne conserve que les champs attendus du formulaire (pas d'injection de champs arbitraires)
+function sanitizeProperty(property = {}) {
+  const allowed = [
+    'address', 'lat', 'lng', 'type', 'surface', 'totalSurface', 'rooms', 'bathrooms',
+    'floors', 'floor', 'hasElevator', 'hasBasement', 'basementSurface', 'hasBalconyTerrace',
+    'balconyTerraceSurface', 'hasOutdoorParking', 'outdoorParkingCount', 'hasIndoorParking',
+    'indoorParkingCount', 'hasPool', 'view', 'yearBuilt', 'dpe', 'standing'
+  ];
+  return Object.fromEntries(
+    allowed.filter(key => property[key] !== undefined).map(key => [key, property[key]])
+  );
+}
+
+function syncBrevo(lead) {
+  if (!lead.email || !lead.name || !lead.estimationReason) return Promise.resolve();
+  return createOrUpdateBrevoContact({
+    email: lead.email,
+    name: lead.name,
+    phone: lead.phone ? normalizePhoneNumber(lead.phone) : '',
+    estimationReason: lead.estimationReason,
+    property: lead.property,
+    estimation: lead.estimation,
+    consent: lead.consent
+  })
+    .then(result => {
+      if (!result.success) console.error(`Brevo sync failed: ${result.error}`);
+    })
+    .catch(error => console.error('Brevo sync error:', error));
+}
+
+// Estimation complète : comparables DVF + ajustements + (option) annonces du marché
+async function computeEstimation({ address, lat, lng, type, surface, characteristics = {} }) {
+  const dvfResult = await getAdaptiveComparables({ lat, lng, type, surface, ...DVF_SEARCH });
+
+  let adjustmentData = null;
+  let finalPrice = null;
+
+  if (dvfResult.stats) {
+    const adjustmentResult = calculateAdjustments({ ...characteristics, type, surface }, dvfResult);
+    const priceData = calculateAdjustedPrice(
+      dvfResult.stats.weightedAverage,
+      surface,
+      adjustmentResult,
+      dvfResult
+    );
+
+    adjustmentData = { ...adjustmentResult, ...priceData };
+    finalPrice = {
+      mid: priceData.priceMid,
+      low: priceData.priceLow,
+      high: priceData.priceHigh,
+      confidence: priceData.confidence
+    };
+  }
+
+  // Le scraping SeLoger est lent (navigateur headless, 30 s+), fragile (anti-bot,
+  // sélecteurs CSS) et juridiquement risqué : désactivé sauf activation explicite.
+  let marketResult = { listings: [], stats: null };
+  if (process.env.MARKET_SCRAPING_ENABLED === 'true') {
+    try {
+      const { scrapeSeLoger, calculateMarketStats } = await import('../../../lib/scraper');
+      const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
+      marketResult = { listings: listings.slice(0, 20), stats: calculateMarketStats(listings) };
+    } catch (error) {
+      console.error('Market scraping failed:', error);
+    }
+  }
+
+  let delta = null;
+  if (adjustmentData && marketResult.stats) {
+    const adjustedPrice = adjustmentData.adjustedPricePerM2;
+    const marketPrice = marketResult.stats.medianPricePerM2;
+    delta = ((marketPrice - adjustedPrice) / adjustedPrice * 100).toFixed(1);
+  }
+
+  return {
+    dvf: dvfResult,
+    adjustments: adjustmentData,
+    finalPrice,
+    market: marketResult,
+    delta,
+    disclaimer: 'Estimations basées sur DVF (open data) et ajustements selon caractéristiques — valeurs indicatives, non contractuelles.'
+  };
+}
+
+// Création puis envoi d'un code OTP (partagé par send-otp et resend-otp)
+async function issueOTP(request, phone) {
+  const normalizedPhone = normalizePhoneNumber(phone);
+
+  if (shouldBypassVerification(phone)) {
+    return json(request, { success: true, bypass: true, message: 'Verification bypassed for this number' });
+  }
+
+  if (!isValidFrenchPhone(normalizedPhone)) {
+    return json(request, { error: 'Numéro de téléphone invalide. Format attendu : 06 12 34 56 78' }, 400);
+  }
+
+  // Anti-abus : limite les envois de SMS (coût) par IP et par numéro
+  const ip = clientIp(request);
+  if (!rateLimit(`otp-ip:${ip}`, { limit: 10, windowMs: 60 * 60 * 1000 }) ||
+      !rateLimit(`otp-phone:${normalizedPhone}`, { limit: 5, windowMs: 60 * 60 * 1000 })) {
+    return json(request, { error: 'Trop de demandes. Réessayez plus tard.' }, 429);
+  }
+
+  const collection = await getCollection('otp_verifications');
+
+  const recentOTP = await collection.findOne({
+    phone: normalizedPhone,
+    verified: false,
+    createdAt: { $gt: new Date(Date.now() - 30 * 1000) }
+  });
+  if (recentOTP) {
+    return json(request, { error: 'Veuillez patienter 30 secondes avant de demander un nouveau code.' }, 429);
+  }
+
+  await collection.deleteMany({ phone: normalizedPhone, verified: false });
+
+  const code = generateOTP(6);
+  await collection.insertOne({
+    phone: normalizedPhone,
+    code,
+    createdAt: new Date(),
+    expiresAt: calculateExpirationTime(5),
+    verified: false,
+    attempts: 0
+  });
+
+  const smsResult = await sendOTPSMS(normalizedPhone, code);
+  if (!smsResult.success) {
+    await collection.deleteOne({ phone: normalizedPhone, code });
+    return json(request, { error: "L'envoi du code a échoué. Veuillez réessayer." }, 500);
+  }
+
+  return json(request, { success: true, message: 'Verification code sent', expiresInSeconds: 5 * 60 });
 }
 
 export async function GET(request) {
   const { pathname, searchParams } = new URL(request.url);
 
   try {
-    // Root endpoint
     if (pathname === '/api/' || pathname === '/api') {
-      return NextResponse.json(
-        { message: 'AlterEgo API is running', version: '2.0.0' },
-        { headers: corsHeaders }
-      );
+      return json(request, { message: 'AlterEgo API is running', version: '2.1.0' });
     }
 
-    // Geocode address using French government BAN API
+    // Géocodage via la Base Adresse Nationale
     if (pathname === '/api/geo/resolve') {
-      const address = searchParams.get('address');
-      
-      if (!address) {
-        return NextResponse.json(
-          { error: 'Address is required' },
-          { status: 400, headers: corsHeaders }
-        );
+      const address = (searchParams.get('address') || '').trim();
+      if (address.length < 3) {
+        return json(request, { error: 'Address is required' }, 400);
       }
-      
+
       const response = await fetch(
-        `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(address)}&limit=5`
+        `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(address.slice(0, 200))}&limit=5&autocomplete=1`,
+        { signal: AbortSignal.timeout(5000) }
       );
+      if (!response.ok) {
+        return json(request, { suggestions: [] });
+      }
       const data = await response.json();
-      
-      if (data.features && data.features.length > 0) {
-        const suggestions = data.features.map(f => ({
-          address: f.properties.label,
-          lat: f.geometry.coordinates[1],
-          lng: f.geometry.coordinates[0],
-          city: f.properties.city,
-          postalCode: f.properties.postcode
-        }));
-        
-        return NextResponse.json(
-          { suggestions },
-          { headers: corsHeaders }
-        );
-      }
-      
-      return NextResponse.json(
-        { error: 'Address not found' },
-        { status: 404, headers: corsHeaders }
-      );
+
+      const suggestions = (data.features || []).map(f => ({
+        address: f.properties.label,
+        lat: f.geometry.coordinates[1],
+        lng: f.geometry.coordinates[0],
+        city: f.properties.city,
+        postalCode: f.properties.postcode
+      }));
+      return json(request, { suggestions });
     }
 
-    // Get DVF comparables (Enhanced with adaptive algorithm)
+    // Comparables DVF seuls
     if (pathname === '/api/dvf/comparables') {
-      const lat = parseFloat(searchParams.get('lat'));
-      const lng = parseFloat(searchParams.get('lng'));
-      const type = searchParams.get('type');
-      const surface = parseFloat(searchParams.get('surface'));
-      const radiusMeters = parseInt(searchParams.get('radiusMeters')) || 500;
-      const months = parseInt(searchParams.get('months')) || 24;
-      
-      if (!lat || !lng || !type || !surface) {
-        return NextResponse.json(
-          { error: 'Missing required parameters' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      // Use enhanced adaptive algorithm
-      const result = await getAdaptiveComparables({
-        lat,
-        lng,
-        type,
-        surface,
-        initialRadiusMeters: radiusMeters,
-        maxRadiusMeters: 800,
-        months,
-        maxMonths: 36,
-        minComparables: 8
+      const { params, error } = parseEstimateParams({
+        lat: searchParams.get('lat'),
+        lng: searchParams.get('lng'),
+        type: searchParams.get('type'),
+        surface: searchParams.get('surface')
       });
-      
-      return NextResponse.json(result, { headers: corsHeaders });
+      if (error) return json(request, { error }, 400);
+
+      const radiusMeters = Math.min(parseInt(searchParams.get('radiusMeters')) || 500, DVF_SEARCH.maxRadiusMeters);
+      const months = Math.min(parseInt(searchParams.get('months')) || 24, DVF_SEARCH.maxMonths);
+
+      const result = await getAdaptiveComparables({
+        ...params,
+        ...DVF_SEARCH,
+        initialRadiusMeters: radiusMeters,
+        months
+      });
+      return json(request, result);
     }
 
-    // Get active market listings
-    if (pathname === '/api/market/listings') {
-      const address = searchParams.get('address');
-      const lat = parseFloat(searchParams.get('lat'));
-      const lng = parseFloat(searchParams.get('lng'));
-      const type = searchParams.get('type');
-      const surface = parseFloat(searchParams.get('surface'));
-      
-      if (!address || !lat || !lng || !type || !surface) {
-        return NextResponse.json(
-          { error: 'Missing required parameters' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
-        const stats = calculateMarketStats(listings);
-        
-        return NextResponse.json(
-          { listings: listings.slice(0, 20), stats },
-          { headers: corsHeaders }
-        );
-      } catch (error) {
-        console.error('Market scraping error:', error);
-        return NextResponse.json(
-          { error: 'Failed to fetch market listings', listings: [], stats: null },
-          { status: 200, headers: corsHeaders }
-        );
-      }
-    }
-
-    // Get all leads (admin)
+    // Liste des leads (admin)
     if (pathname === '/api/leads') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       const collection = await getCollection('leads');
       const leads = await collection.find({}).sort({ createdAt: -1 }).toArray();
-      
-      return NextResponse.json({ leads }, { headers: corsHeaders });
+      return json(request, { leads });
     }
 
-    // Get DVF ingestion status (admin)
+    // Statistiques DVF par département (admin)
     if (pathname === '/api/admin/dvf/status') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       const collection = await getCollection('dvf_sales');
-      
-      // Get statistics per department
-      const pipeline = [
+      const stats = await collection.aggregate([
         {
           $group: {
             _id: '$code_departement',
             count: { $sum: 1 },
-            appartements: {
-              $sum: { $cond: [{ $eq: ['$type_local', 'appartement'] }, 1, 0] }
-            },
-            maisons: {
-              $sum: { $cond: [{ $eq: ['$type_local', 'maison'] }, 1, 0] }
-            },
+            appartements: { $sum: { $cond: [{ $eq: ['$type_local', 'appartement'] }, 1, 0] } },
+            maisons: { $sum: { $cond: [{ $eq: ['$type_local', 'maison'] }, 1, 0] } },
             lastImport: { $max: '$imported_at' }
           }
         },
         { $sort: { _id: 1 } }
-      ];
-      
-      const stats = await collection.aggregate(pipeline).toArray();
+      ]).toArray();
       const total = await collection.countDocuments({});
-      
-      return NextResponse.json({ 
-        total, 
-        byDepartment: stats 
-      }, { headers: corsHeaders });
+      return json(request, { total, byDepartment: stats });
     }
 
-    // Test endpoint pour vérifier les variables d'environnement (GET)
-    if (pathname === '/api/test-env') {
-      return NextResponse.json(
-        {
-          hasBrevoKey: !!process.env.BREVO_API_KEY,
-          keyPrefix: process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.substring(0, 15) + '...' : 'NOT_SET',
-          hasBypassPhone: !!process.env.BYPASS_PHONE_NUMBER,
-          nodeEnv: process.env.NODE_ENV
-        },
-        { headers: corsHeaders }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Not found' },
-      { status: 404, headers: corsHeaders }
-    );
+    return json(request, { error: 'Not found' }, 404);
   } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
-      { status: 500, headers: corsHeaders }
-    );
+    return serverError(request, error);
   }
 }
 
@@ -253,764 +323,316 @@ export async function POST(request) {
   const { pathname } = new URL(request.url);
 
   try {
-    // Admin login
+    // Connexion admin
     if (pathname === '/api/auth/login') {
-      const { username, password } = await request.json();
-      
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '24h' });
-        
-        return NextResponse.json(
-          { token, user: { username } },
-          { headers: corsHeaders }
-        );
+      const { username, password } = await readJson(request);
+      const expectedUser = process.env.ADMIN_USERNAME;
+      const expectedPassword = process.env.ADMIN_PASSWORD;
+
+      if (!expectedUser || !expectedPassword || !getJwtSecret()) {
+        return json(request, { error: 'Admin login is not configured' }, 503);
       }
-      
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401, headers: corsHeaders }
-      );
+
+      if (!rateLimit(`login:${clientIp(request)}`, { limit: 10, windowMs: 15 * 60 * 1000 })) {
+        return json(request, { error: 'Too many attempts, try again later' }, 429);
+      }
+
+      if (safeEqual(username, expectedUser) && safeEqual(password, expectedPassword)) {
+        const token = signAdminToken(username);
+        return json(request, { token, user: { username } });
+      }
+
+      return json(request, { error: 'Invalid credentials' }, 401);
     }
 
-    // Send OTP for phone verification
-    if (pathname === '/api/verification/send-otp') {
-      const { phone } = await request.json();
-      
-      if (!phone) {
-        return NextResponse.json(
-          { error: 'Phone number is required' },
-          { status: 400, headers: corsHeaders }
-        );
+    // Envoi / renvoi du code OTP
+    if (pathname === '/api/verification/send-otp' || pathname === '/api/verification/resend-otp') {
+      const { phone } = await readJson(request);
+      if (!phone || typeof phone !== 'string') {
+        return json(request, { error: 'Le numéro de téléphone est requis.' }, 400);
       }
-      
-      // Normaliser le numéro
-      const normalizedPhone = normalizePhoneNumber(phone);
-      
-      // Vérifier si le numéro bypass la vérification
-      if (shouldBypassVerification(phone)) {
-        return NextResponse.json(
-          { success: true, bypass: true, message: 'Verification bypassed for this number' },
-          { headers: corsHeaders }
-        );
-      }
-      
-      // Valider le format
-      if (!isValidFrenchPhone(normalizedPhone)) {
-        return NextResponse.json(
-          { error: 'Invalid French phone number format. Use format: 06 12 34 56 78' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      const collection = await getCollection('otp_verifications');
-      
-      // Vérifier s'il existe déjà un OTP non expiré (rate limiting)
-      const existingOTP = await collection.findOne({
-        phone: normalizedPhone,
-        verified: false,
-        expiresAt: { $gt: new Date() }
-      });
-      
-      if (existingOTP) {
-        // Vérifier si créé il y a moins de 30 secondes (cooldown)
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
-        if (new Date(existingOTP.createdAt) > thirtySecondsAgo) {
-          return NextResponse.json(
-            { error: 'Please wait 30 seconds before requesting another code' },
-            { status: 429, headers: corsHeaders }
-          );
-        }
-      }
-      
-      // Supprimer les anciens OTP pour ce numéro
-      await collection.deleteMany({
-        phone: normalizedPhone,
-        verified: false
-      });
-      
-      // Générer un nouveau code
-      const code = generateOTP(6);
-      const expiresAt = calculateExpirationTime(5); // 5 minutes
-      
-      // Sauvegarder en base
-      await collection.insertOne({
-        phone: normalizedPhone,
-        code,
-        createdAt: new Date(),
-        expiresAt,
-        verified: false,
-        attempts: 0
-      });
-      
-      // Envoyer le SMS via Brevo
-      const smsResult = await sendOTPSMS(normalizedPhone, code);
-      
-      if (!smsResult.success) {
-        // Supprimer l'OTP si l'envoi a échoué
-        await collection.deleteOne({ phone: normalizedPhone, code });
-        return NextResponse.json(
-          { error: 'Failed to send verification code. Please try again.' },
-          { status: 500, headers: corsHeaders }
-        );
-      }
-      
-      return NextResponse.json(
-        { 
-          success: true, 
-          message: 'Verification code sent successfully',
-          expiresInSeconds: 5 * 60
-        },
-        { headers: corsHeaders }
-      );
+      return issueOTP(request, phone);
     }
-    
-    // Verify OTP
+
+    // Vérification du code OTP
     if (pathname === '/api/verification/verify-otp') {
-      const { phone, code } = await request.json();
-      
+      const { phone, code } = await readJson(request);
       if (!phone || !code) {
-        return NextResponse.json(
-          { error: 'Phone and code are required' },
-          { status: 400, headers: corsHeaders }
-        );
+        return json(request, { error: 'Phone and code are required' }, 400);
       }
-      
-      // Normaliser le numéro
-      const normalizedPhone = normalizePhoneNumber(phone);
-      
-      // Vérifier si le numéro bypass la vérification
+
       if (shouldBypassVerification(phone)) {
-        return NextResponse.json(
-          { success: true, verified: true, bypass: true, message: 'Verification bypassed' },
-          { headers: corsHeaders }
-        );
+        return json(request, { success: true, verified: true, bypass: true });
       }
-      
+
+      const normalizedPhone = normalizePhoneNumber(phone);
       const collection = await getCollection('otp_verifications');
-      
-      // Trouver l'OTP
-      const otpRecord = await collection.findOne({
-        phone: normalizedPhone,
-        verified: false
-      });
-      
+      const otpRecord = await collection.findOne({ phone: normalizedPhone, verified: false });
+
       if (!otpRecord) {
-        return NextResponse.json(
-          { error: 'No pending verification for this phone number' },
-          { status: 404, headers: corsHeaders }
-        );
+        return json(request, { error: 'Aucune vérification en cours pour ce numéro.' }, 404);
       }
-      
-      // Vérifier l'expiration
+
       if (isOTPExpired(otpRecord.expiresAt)) {
         await collection.deleteOne({ _id: otpRecord._id });
-        return NextResponse.json(
-          { error: 'Verification code has expired. Please request a new one.' },
-          { status: 400, headers: corsHeaders }
-        );
+        return json(request, { error: 'Le code a expiré. Demandez-en un nouveau.' }, 400);
       }
-      
-      // Vérifier le nombre de tentatives
+
       const maxAttempts = parseInt(process.env.MAX_OTP_ATTEMPTS) || 5;
       if (otpRecord.attempts >= maxAttempts) {
         await collection.deleteOne({ _id: otpRecord._id });
-        return NextResponse.json(
-          { error: 'Too many failed attempts. Please request a new code.' },
-          { status: 429, headers: corsHeaders }
-        );
+        return json(request, { error: 'Trop de tentatives. Demandez un nouveau code.' }, 429);
       }
-      
-      // Vérifier le code
-      if (otpRecord.code !== code) {
-        // Incrémenter les tentatives
-        await collection.updateOne(
-          { _id: otpRecord._id },
-          { $inc: { attempts: 1 } }
-        );
-        return NextResponse.json(
-          { error: 'Invalid verification code', attemptsRemaining: maxAttempts - otpRecord.attempts - 1 },
-          { status: 400, headers: corsHeaders }
-        );
+
+      if (!safeEqual(String(code), otpRecord.code)) {
+        await collection.updateOne({ _id: otpRecord._id }, { $inc: { attempts: 1 } });
+        return json(request, {
+          error: 'Code incorrect.',
+          attemptsRemaining: maxAttempts - otpRecord.attempts - 1
+        }, 400);
       }
-      
-      // Marquer comme vérifié
+
       await collection.updateOne(
         { _id: otpRecord._id },
         { $set: { verified: true, verifiedAt: new Date() } }
       );
-      
-      return NextResponse.json(
-        { success: true, verified: true, message: 'Phone verified successfully' },
-        { headers: corsHeaders }
-      );
-    }
-    
-    // Resend OTP
-    if (pathname === '/api/verification/resend-otp') {
-      const { phone } = await request.json();
-      
-      if (!phone) {
-        return NextResponse.json(
-          { error: 'Phone number is required' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      // Réutiliser la logique de send-otp
-      const normalizedPhone = normalizePhoneNumber(phone);
-      
-      // Vérifier si le numéro bypass la vérification
-      if (shouldBypassVerification(phone)) {
-        return NextResponse.json(
-          { success: true, bypass: true, message: 'Verification bypassed for this number' },
-          { headers: corsHeaders }
-        );
-      }
-      
-      const collection = await getCollection('otp_verifications');
-      
-      // Vérifier le cooldown (30 secondes)
-      const recentOTP = await collection.findOne({
-        phone: normalizedPhone,
-        verified: false,
-        createdAt: { $gt: new Date(Date.now() - 30 * 1000) }
-      });
-      
-      if (recentOTP) {
-        return NextResponse.json(
-          { error: 'Please wait 30 seconds before requesting another code' },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      
-      // Supprimer les anciens OTP
-      await collection.deleteMany({
-        phone: normalizedPhone,
-        verified: false
-      });
-      
-      // Générer et envoyer un nouveau code
-      const code = generateOTP(6);
-      const expiresAt = calculateExpirationTime(5);
-      
-      await collection.insertOne({
-        phone: normalizedPhone,
-        code,
-        createdAt: new Date(),
-        expiresAt,
-        verified: false,
-        attempts: 0
-      });
-      
-      const smsResult = await sendOTPSMS(normalizedPhone, code);
-      
-      if (!smsResult.success) {
-        await collection.deleteOne({ phone: normalizedPhone, code });
-        return NextResponse.json(
-          { error: 'Failed to send verification code. Please try again.' },
-          { status: 500, headers: corsHeaders }
-        );
-      }
-      
-      return NextResponse.json(
-        { 
-          success: true, 
-          message: 'New verification code sent successfully',
-          expiresInSeconds: 5 * 60
-        },
-        { headers: corsHeaders }
-      );
+      return json(request, { success: true, verified: true });
     }
 
-    // Submit lead
+    // Création d'un lead (après vérification du téléphone côté serveur)
     if (pathname === '/api/leads') {
-      const leadData = await request.json();
-      
+      const body = await readJson(request);
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase().slice(0, 200) : '';
+      const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 30) : '';
+
+      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !phone) {
+        return json(request, { error: 'Nom, email et téléphone valides sont requis.' }, 400);
+      }
+      if (!ESTIMATION_REASONS.includes(body.estimationReason)) {
+        return json(request, { error: "Raison de l'estimation invalide." }, 400);
+      }
+      if (body.consent !== true) {
+        return json(request, { error: 'Le consentement est requis.' }, 400);
+      }
+      if (!(await isPhoneRecentlyVerified(phone))) {
+        return json(request, { error: 'Numéro de téléphone non vérifié.' }, 403);
+      }
+
       const lead = {
         id: uuidv4(),
-        ...leadData,
+        name,
+        email,
+        phone,
+        estimationReason: body.estimationReason,
+        consent: true,
+        consentAt: new Date().toISOString(),
+        phoneVerified: true,
+        property: sanitizeProperty(body.property),
+        status: 'pending_estimation',
+        source: typeof body.source === 'string' ? body.source.slice(0, 100) : 'estimation',
         createdAt: new Date().toISOString()
       };
-      
+
       const collection = await getCollection('leads');
       await collection.insertOne(lead);
-      
-      // Créer/Mettre à jour le contact dans Brevo si toutes les infos sont présentes
-      if (leadData.email && leadData.name && leadData.estimationReason) {
-        try {
-          // Normaliser le numéro de téléphone au format E.164 pour Brevo
-          const normalizedPhone = leadData.phone ? normalizePhoneNumber(leadData.phone) : '';
-          
-          const brevoResult = await createOrUpdateBrevoContact({
-            email: leadData.email,
-            name: leadData.name,
-            phone: normalizedPhone,  // Numéro normalisé (+33...)
-            estimationReason: leadData.estimationReason, // "Acheter" ou "Vendre"
-            property: leadData.property,
-            estimation: leadData.estimation,
-            consent: leadData.consent
-          });
-          
-          if (brevoResult.success) {
-            console.log(`✅ Contact Brevo synchronisé pour ${leadData.email}`);
-          } else {
-            console.error(`⚠️ Échec synchronisation Brevo: ${brevoResult.error}`);
-            // On ne bloque pas la création du lead si Brevo échoue
-          }
-        } catch (error) {
-          console.error('⚠️ Erreur lors de la synchronisation Brevo:', error);
-          // On continue même si Brevo échoue
+
+      // Le contact est créé dans Brevo dès maintenant, puis enrichi avec l'estimation
+      await syncBrevo(lead);
+
+      return json(request, { success: true, leadId: lead.id });
+    }
+
+    // Estimation complète. Si leadId est fourni, l'estimation est rattachée au lead
+    // existant (un seul lead par estimation, plus de doublon).
+    if (pathname === '/api/estimate') {
+      const body = await readJson(request);
+      const { params, error } = parseEstimateParams(body);
+      if (error) return json(request, { error }, 400);
+
+      if (!rateLimit(`estimate:${clientIp(request)}`, { limit: 30, windowMs: 60 * 60 * 1000 })) {
+        return json(request, { error: 'Trop de demandes. Réessayez plus tard.' }, 429);
+      }
+
+      const result = await computeEstimation({
+        address: typeof body.address === 'string' ? body.address : '',
+        ...params,
+        characteristics: body.characteristics && typeof body.characteristics === 'object' ? body.characteristics : {}
+      });
+
+      if (typeof body.leadId === 'string' && body.leadId) {
+        const collection = await getCollection('leads');
+        const lead = await collection.findOneAndUpdate(
+          { id: body.leadId, status: 'pending_estimation' },
+          {
+            $set: {
+              estimation: result,
+              status: 'estimation_complete',
+              lastModified: new Date().toISOString()
+            }
+          },
+          { returnDocument: 'after' }
+        );
+        // Compatibilité driver MongoDB v5 ({ value }) et v6 (document)
+        const updatedLead = lead && lead.value !== undefined ? lead.value : lead;
+        if (updatedLead) {
+          await syncBrevo(updatedLead);
         }
       }
-      
-      return NextResponse.json(
-        { success: true, leadId: lead.id },
-        { headers: corsHeaders }
-      );
+
+      return json(request, result);
     }
 
-    // Full estimation with adjustments (DVF + Market)
-    if (pathname === '/api/estimate') {
-      const { address, lat, lng, type, surface, characteristics } = await request.json();
-      
-      if (!address || !lat || !lng || !type || !surface) {
-        return NextResponse.json(
-          { error: 'Missing required parameters' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      // Get DVF comparables with enhanced adaptive algorithm
-      const dvfResult = await getAdaptiveComparables({
-        lat,
-        lng,
-        type,
-        surface,
-        initialRadiusMeters: 500,
-        maxRadiusMeters: 800,
-        months: 24,
-        maxMonths: 36,
-        minComparables: 8
-      });
-      
-      // Calculate adjustments if we have DVF data
-      let adjustmentData = null;
-      let finalPrice = null;
-      
-      if (dvfResult.stats) {
-        const adjustmentResult = calculateAdjustments(
-          { ...characteristics, type, surface },
-          dvfResult
-        );
-        
-        const priceData = calculateAdjustedPrice(
-          dvfResult.stats.weightedAverage,
-          surface,
-          adjustmentResult,
-          dvfResult
-        );
-        
-        adjustmentData = {
-          ...adjustmentResult,
-          ...priceData
-        };
-        
-        finalPrice = {
-          mid: priceData.priceMid,
-          low: priceData.priceLow,
-          high: priceData.priceHigh,
-          confidence: priceData.confidence
-        };
-      }
-      
-      // Get market listings
-      let marketResult = { listings: [], stats: null };
-      try {
-        const listings = await scrapeSeLoger({ address, lat, lng, type, surface });
-        marketResult = {
-          listings: listings.slice(0, 20),
-          stats: calculateMarketStats(listings)
-        };
-      } catch (error) {
-        console.error('Market scraping failed:', error);
-      }
-      
-      // Calculate delta
-      let delta = null;
-      if (adjustmentData && marketResult.stats) {
-        const adjustedPrice = adjustmentData.adjustedPricePerM2;
-        const marketPrice = marketResult.stats.medianPricePerM2;
-        delta = ((marketPrice - adjustedPrice) / adjustedPrice * 100).toFixed(1);
-      }
-      
-      return NextResponse.json(
-        {
-          dvf: dvfResult,
-          adjustments: adjustmentData,
-          finalPrice,
-          market: marketResult,
-          delta,
-          disclaimer: 'Estimations basées sur DVF (open data) et ajustements selon caractéristiques — valeurs indicatives, non contractuelles.'
-        },
-        { headers: corsHeaders }
-      );
-    }
-
-    // Trigger DVF ingestion (admin)
+    // Lancer une ingestion DVF par départements (admin)
     if (pathname === '/api/admin/dvf/ingest') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
+      const { departments } = await readJson(request);
+      if (!Array.isArray(departments) || departments.length === 0 ||
+          !departments.every(d => /^(\d{2,3}|2[AB])$/.test(String(d)))) {
+        return json(request, { error: 'Invalid departments array' }, 400);
       }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const { departments } = await request.json();
-      
-      if (!departments || !Array.isArray(departments) || departments.length === 0) {
-        return NextResponse.json(
-          { error: 'Invalid departments array' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      // Trigger ingestion asynchronously
+
       setTimeout(async () => {
         try {
           for (const dept of departments) {
             console.log(`[API] Starting ingestion for department ${dept}...`);
-            await ingestDVFDepartment(dept);
+            await ingestDVFDepartment(String(dept));
           }
-        } catch (error) {
-          console.error('[API] Ingestion error:', error);
+        } catch (err) {
+          console.error('[API] Ingestion error:', err);
         }
       }, 100);
-      
-      return NextResponse.json(
-        { 
-          message: 'DVF ingestion started in background',
-          departments
-        },
-        { headers: corsHeaders }
-      );
+
+      return json(request, { message: 'DVF ingestion started in background', departments });
     }
 
-    // Update lead (admin) - update status, contact info, etc.
+    // Mise à jour d'un lead (admin)
     if (pathname === '/api/admin/leads/update') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const { leadId, status, updates } = await request.json();
-      
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
+      const { leadId, status, updates } = await readJson(request);
       if (!leadId) {
-        return NextResponse.json(
-          { error: 'Lead ID is required' },
-          { status: 400, headers: corsHeaders }
-        );
+        return json(request, { error: 'Lead ID is required' }, 400);
       }
-      
-      const collection = await getCollection('leads');
-      
-      // Build update object
+
       const updateObj = {};
-      
-      if (status) {
-        updateObj.status = status;
-      }
-      
-      if (updates) {
-        // Allow updating specific fields
-        if (updates.name) updateObj.name = updates.name;
-        if (updates.email) updateObj.email = updates.email;
-        if (updates.phone !== undefined) updateObj.phone = updates.phone;
-        if (updates.status) updateObj.status = updates.status;
-      }
-      
-      // Add last modified timestamp
-      updateObj.lastModified = new Date().toISOString();
-      
-      const result = await collection.updateOne(
-        { id: leadId },
-        { $set: updateObj }
-      );
-      
-      if (result.matchedCount === 0) {
-        return NextResponse.json(
-          { error: 'Lead not found' },
-          { status: 404, headers: corsHeaders }
-        );
-      }
-      
-      return NextResponse.json(
-        { success: true, updated: result.modifiedCount > 0 },
-        { headers: corsHeaders }
-      );
-    }
-
-    // Add comment to lead (admin)
-    if (pathname === '/api/admin/leads/comment') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const { leadId, comment, author, timestamp } = await request.json();
-      
-      if (!leadId || !comment) {
-        return NextResponse.json(
-          { error: 'Lead ID and comment are required' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-      
-      const collection = await getCollection('leads');
-      
-      const commentObj = {
-        author: author || 'Admin',
-        comment,
-        timestamp: timestamp || new Date().toISOString()
-      };
-      
-      const result = await collection.updateOne(
-        { id: leadId },
-        { 
-          $push: { comments: commentObj },
-          $set: { lastModified: new Date().toISOString() }
+      const newStatus = status || updates?.status;
+      if (newStatus) {
+        if (!LEAD_STATUSES.includes(newStatus)) {
+          return json(request, { error: 'Invalid status' }, 400);
         }
-      );
-      
-      if (result.matchedCount === 0) {
-        return NextResponse.json(
-          { error: 'Lead not found' },
-          { status: 404, headers: corsHeaders }
-        );
+        updateObj.status = newStatus;
       }
-      
-      return NextResponse.json(
-        { success: true, comment: commentObj },
-        { headers: corsHeaders }
-      );
+      if (updates) {
+        if (typeof updates.name === 'string' && updates.name) updateObj.name = updates.name.slice(0, 120);
+        if (typeof updates.email === 'string' && updates.email) updateObj.email = updates.email.slice(0, 200);
+        if (typeof updates.phone === 'string') updateObj.phone = updates.phone.slice(0, 30);
+      }
+      updateObj.lastModified = new Date().toISOString();
+
+      const collection = await getCollection('leads');
+      const result = await collection.updateOne({ id: String(leadId) }, { $set: updateObj });
+      if (result.matchedCount === 0) {
+        return json(request, { error: 'Lead not found' }, 404);
+      }
+      return json(request, { success: true, updated: result.modifiedCount > 0 });
     }
 
-    // DVF Admin: Start ingestion
+    // Ajout d'un commentaire sur un lead (admin)
+    if (pathname === '/api/admin/leads/comment') {
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
+      const { leadId, comment, author } = await readJson(request);
+      if (!leadId || typeof comment !== 'string' || !comment.trim()) {
+        return json(request, { error: 'Lead ID and comment are required' }, 400);
+      }
+
+      const commentObj = {
+        author: typeof author === 'string' && author ? author.slice(0, 80) : 'Admin',
+        comment: comment.slice(0, 5000),
+        timestamp: new Date().toISOString()
+      };
+
+      const collection = await getCollection('leads');
+      const result = await collection.updateOne(
+        { id: String(leadId) },
+        { $push: { comments: commentObj }, $set: { lastModified: new Date().toISOString() } }
+      );
+      if (result.matchedCount === 0) {
+        return json(request, { error: 'Lead not found' }, 404);
+      }
+      return json(request, { success: true, comment: commentObj });
+    }
+
+    // DVF admin : ingestion complète
     if (pathname === '/api/admin/dvf/start') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       try {
         const result = await startDVFIngestion();
-        return NextResponse.json(result, { headers: corsHeaders });
+        return json(request, result);
       } catch (error) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400, headers: corsHeaders }
-        );
+        return json(request, { error: error.message }, 400);
       }
     }
 
-    // DVF Admin: Clear data
+    // DVF admin : purge des données
     if (pathname === '/api/admin/dvf/clear') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       const result = await clearDVFData();
-      
-      return NextResponse.json(result, { headers: corsHeaders });
+      return json(request, result);
     }
 
-    return NextResponse.json(
-      { error: 'Not found' },
-      { status: 404, headers: corsHeaders }
-    );
+    return json(request, { error: 'Not found' }, 404);
   } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
-      { status: 500, headers: corsHeaders }
-    );
+    return serverError(request, error);
   }
 }
 
-
 export async function DELETE(request) {
-  const { pathname } = new URL(request.url);
+  const { pathname, searchParams } = new URL(request.url);
 
   try {
-    // Delete lead (admin)
+    // Suppression d'un lead (admin)
     if (pathname === '/api/admin/leads/delete') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const { searchParams } = new URL(request.url);
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       const leadId = searchParams.get('leadId');
-      
       if (!leadId) {
-        return NextResponse.json(
-          { error: 'Lead ID is required' },
-          { status: 400, headers: corsHeaders }
-        );
+        return json(request, { error: 'Lead ID is required' }, 400);
       }
-      
+
       const collection = await getCollection('leads');
-      
       const result = await collection.deleteOne({ id: leadId });
-      
       if (result.deletedCount === 0) {
-        return NextResponse.json(
-          { error: 'Lead not found' },
-          { status: 404, headers: corsHeaders }
-        );
+        return json(request, { error: 'Lead not found' }, 404);
       }
-      
-      return NextResponse.json(
-        { success: true, deleted: true },
-        { headers: corsHeaders }
-      );
+      return json(request, { success: true, deleted: true });
     }
 
-    // DVF Admin: Get statistics
+    // Conservés pour compatibilité (ces lectures devraient être des GET)
     if (pathname === '/api/admin/dvf/stats') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const stats = await getDVFStats();
-      
-      return NextResponse.json(stats, { headers: corsHeaders });
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+      return json(request, await getDVFStats());
     }
 
-    // DVF Admin: Get ingestion status
     if (pathname === '/api/admin/dvf/status') {
-      const authHeader = request.headers.get('authorization');
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      try {
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid token' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      
-      const state = getIngestionState();
-      
-      return NextResponse.json(state, { headers: corsHeaders });
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+      return json(request, getIngestionState());
     }
 
-    return NextResponse.json(
-      { error: 'Not found' },
-      { status: 404, headers: corsHeaders }
-    );
+    return json(request, { error: 'Not found' }, 404);
   } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
-      { status: 500, headers: corsHeaders }
-    );
+    return serverError(request, error);
   }
 }

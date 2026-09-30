@@ -1,249 +1,310 @@
 'use client'
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
-import { Home, Building2, MapPin, ArrowRight, Loader2, Info, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Home, Building2, MapPin, ArrowRight, ArrowLeft, Loader2, RotateCcw, Check, ShieldCheck, Clock, LineChart } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp';
 import dynamic from 'next/dynamic';
 
-const EstimationMap = dynamic(() => import('@/components/EstimationMap'), { ssr: false });
+const EstimationMap = dynamic(() => import('@/components/EstimationMap'), {
+  ssr: false,
+  loading: () => <div className="h-96 w-full rounded-card bg-ae-sand animate-pulse" />
+});
+
+const SITE_URL = process.env.NEXT_PUBLIC_MAIN_SITE_URL || 'https://alteregopatrimoine.com';
+const CONTACT_URL = process.env.NEXT_PUBLIC_CONTACT_URL || SITE_URL;
+const TOTAL_STEPS = 6;
+
+const INITIAL_FORM = {
+  // Étape 1 : adresse
+  address: '',
+  lat: null,
+  lng: null,
+  // Étape 2 : type
+  type: '',
+  // Étape 3 : caractéristiques principales
+  surface: '',
+  totalSurface: '',
+  rooms: '',
+  bathrooms: '',
+  floors: '',
+  floor: '',
+  hasElevator: null,
+  // Étape 4 : atouts
+  hasBasement: false,
+  basementSurface: '',
+  hasBalconyTerrace: false,
+  balconyTerraceSurface: '',
+  hasOutdoorParking: false,
+  outdoorParkingCount: '',
+  hasIndoorParking: false,
+  indoorParkingCount: '',
+  hasPool: false,
+  view: '',
+  // Étape 5 : état
+  yearBuilt: '',
+  dpe: '',
+  standing: 3
+};
+
+const INITIAL_LEAD = {
+  name: '',
+  email: '',
+  phone: '',
+  estimationReason: '',
+  consent: false
+};
+
+const STANDING_LEVELS = [
+  { value: 1, label: 'À rénover', sentence: 'nécessite une rénovation' },
+  { value: 2, label: 'Moyen', sentence: 'est dans un état moyen' },
+  { value: 3, label: 'Bon', sentence: 'est en bon état' },
+  { value: 4, label: 'Très bon', sentence: 'est en très bon état' },
+  { value: 5, label: 'Excellent', sentence: 'est dans un état excellent' }
+];
+
+const VIEW_OPTIONS = [
+  { value: 'vis_a_vis', label: 'Vis-à-vis' },
+  { value: 'degagee', label: 'Dégagée' },
+  { value: 'exceptionnelle', label: 'Exceptionnelle' }
+];
+
+// Couleurs de l'étiquette énergie réglementaire (information fonctionnelle)
+const DPE_COLORS = {
+  A: '#009C6D', B: '#52B153', C: '#A5CC74', D: '#F4E70F', E: '#F2A93B', F: '#EB6B25', G: '#D7221F'
+};
+
+const formatEuros = (value) =>
+  `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(value)} €`;
+
+const formatDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+};
 
 export default function App() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [embedded, setEmbedded] = useState(false);
+
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  
-  // États pour la vérification OTP
-  const [otpStep, setOtpStep] = useState('form'); // 'form', 'otp', 'verified'
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const searchTimer = useRef(null);
+  const searchAbort = useRef(null);
+  const rootRef = useRef(null);
+
+  // Vérification OTP
+  const [otpStep, setOtpStep] = useState('form'); // 'form' | 'otp' | 'verified'
   const [otpCode, setOtpCode] = useState('');
   const [otpError, setOtpError] = useState('');
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [phoneVerified, setPhoneVerified] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    // Étape 1: Adresse
-    address: '',
-    lat: null,
-    lng: null,
-    
-    // Étape 2: Type
-    type: '',
-    
-    // Étape 3: Caractéristiques principales
-    surface: '',
-    totalSurface: '',
-    rooms: '',
-    bathrooms: '',
-    floors: '',
-    floor: '', // Pour appartement: à quel étage
-    
-    // Étape 4: Avantages supplémentaires
-    hasBasement: false,
-    basementSurface: '',
-    hasBalconyTerrace: false,
-    balconyTerraceSurface: '',
-    hasOutdoorParking: false,
-    outdoorParkingCount: '',
-    hasIndoorParking: false,
-    indoorParkingCount: '',
-    hasPool: false,
-    view: '',
-    
-    // Étape 5: État du bien
-    yearBuilt: '',
-    dpe: '',
-    standing: 3 // 1-5
-  });
-  
-  const [results, setResults] = useState(null);
-  const [leadForm, setLeadForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    estimationReason: '', // "Acheter" ou "Vendre"
-    consent: false
-  });
 
-  // Search address suggestions
-  const searchAddress = async (query) => {
-    if (query.length < 3) {
+  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [results, setResults] = useState(null);
+  const [estimateError, setEstimateError] = useState('');
+  const [leadForm, setLeadForm] = useState(INITIAL_LEAD);
+
+  const updateForm = (patch) => setFormData(prev => ({ ...prev, ...patch }));
+  const updateLead = (patch) => setLeadForm(prev => ({ ...prev, ...patch }));
+
+  // Mode intégré (iframe sur alteregopatrimoine.com) : ?embed=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setEmbedded(params.get('embed') === '1' || window.self !== window.top);
+  }, []);
+
+  // En iframe, transmet la hauteur au site parent pour un redimensionnement automatique
+  useEffect(() => {
+    if (!embedded || !rootRef.current || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      window.parent.postMessage(
+        { type: 'alterego-estimation:height', height: document.documentElement.scrollHeight },
+        '*'
+      );
+    });
+    observer.observe(rootRef.current);
+    return () => observer.disconnect();
+  }, [embedded]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (embedded) {
+      window.parent.postMessage({ type: 'alterego-estimation:step', step }, '*');
+    }
+  }, [step, embedded]);
+
+  // Compte à rebours de renvoi du SMS
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setTimeout(() => setOtpCountdown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpCountdown]);
+
+  useEffect(() => () => {
+    clearTimeout(searchTimer.current);
+    searchAbort.current?.abort();
+  }, []);
+
+  // Autocomplétion d'adresse : temporisée et annulable (pas de réponses dans le désordre)
+  const searchAddress = (query) => {
+    clearTimeout(searchTimer.current);
+    searchAbort.current?.abort();
+
+    if (query.trim().length < 3) {
       setAddressSuggestions([]);
+      setShowSuggestions(false);
       return;
     }
-    
-    try {
-      const res = await fetch(`/api/geo/resolve?address=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      if (data.suggestions) {
-        setAddressSuggestions(data.suggestions);
+
+    searchTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
+      try {
+        const res = await fetch(`/api/geo/resolve?address=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const data = await res.json();
+        setAddressSuggestions(data.suggestions || []);
         setShowSuggestions(true);
+        setActiveSuggestion(-1);
+      } catch (error) {
+        if (error.name !== 'AbortError') console.error('Address search error:', error);
       }
-    } catch (error) {
-      console.error('Address search error:', error);
-    }
+    }, 250);
   };
 
   const selectAddress = (suggestion) => {
-    setFormData({
-      ...formData,
-      address: suggestion.address,
-      lat: suggestion.lat,
-      lng: suggestion.lng
-    });
+    updateForm({ address: suggestion.address, lat: suggestion.lat, lng: suggestion.lng });
     setShowSuggestions(false);
     setAddressSuggestions([]);
   };
-  
-  // Map form data to characteristics for API
+
+  const onAddressKeyDown = (e) => {
+    if (!showSuggestions || addressSuggestions.length === 0) {
+      if (e.key === 'Enter' && formData.lat) setStep(2);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestion(i => Math.min(i + 1, addressSuggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestion(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      selectAddress(addressSuggestions[Math.max(activeSuggestion, 0)]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    }
+  };
+
+  // Traduit le formulaire en caractéristiques pour le moteur d'ajustement
   const mapToCharacteristics = () => {
+    const floorNumber = parseInt(formData.floor, 10);
     const chars = {
       type: formData.type,
       surface: parseFloat(formData.surface),
-      
-      // Étage & ascenseur (appartement)
-      floor: formData.type === 'appartement' && formData.floor ? 
-        (formData.floor === '0' ? 'rdc' : formData.floor <= 3 ? '1-3' : '4+') : undefined,
-      hasElevator: formData.floors > 0, // Si building a des étages, assume ascenseur possible
-      
-      // Extérieur (prend en compte la surface saisie)
-      outside: formData.hasBalconyTerrace ? 
-        (parseFloat(formData.balconyTerraceSurface) > 15 || formData.type === 'maison' ? 'large_terrace_or_garden' : 'small_balcony') : 'none',
-      
-      // Vue
-      view: formData.view,
-      
-      // Parking (compte le nombre total)
-      parking: formData.hasIndoorParking ? 
-        (parseInt(formData.indoorParkingCount) >= 2 ? 'box_or_two' : 'one') :
-        formData.hasOutdoorParking ? 
-          (parseInt(formData.outdoorParkingCount) >= 2 ? 'box_or_two' : 'one') : 'none',
-      
-      // État/Standing (1-5 → condition)
-      condition: formData.standing <= 2 ? 'to_renovate' : 
-        (formData.standing >= 4 ? 'renovated' : 'good'),
-      
-      // DPE
+
+      floor: formData.type === 'appartement' && Number.isFinite(floorNumber)
+        ? (floorNumber <= 0 ? 'rdc' : floorNumber <= 3 ? '1-3' : '4+')
+        : undefined,
+      hasElevator: formData.type === 'appartement' ? formData.hasElevator === true : undefined,
+
+      outside: formData.hasBalconyTerrace
+        ? (parseFloat(formData.balconyTerraceSurface) > 15 || formData.type === 'maison' ? 'large_terrace_or_garden' : 'small_balcony')
+        : 'none',
+
+      view: formData.view || undefined,
+
+      parking: formData.hasIndoorParking
+        ? (parseInt(formData.indoorParkingCount) >= 2 ? 'box_or_two' : 'one')
+        : formData.hasOutdoorParking
+          ? (parseInt(formData.outdoorParkingCount) >= 2 ? 'box_or_two' : 'one')
+          : 'none',
+
+      condition: formData.standing <= 2 ? 'to_renovate' : (formData.standing >= 4 ? 'renovated' : 'good'),
+
       dpe: formData.dpe || 'unknown',
-      
-      // Maison extras
-      houseExtras: formData.type === 'maison' ? 
-        (formData.hasPool ? 'pool_or_quality_extras' : 
-         formData.hasBasement ? 'annex' : 'none') : undefined,
-      
-      // Parcelle (maison)
-      plot: formData.type === 'maison' && formData.totalSurface ? 
-        (formData.totalSurface < 300 ? 'small' : 
-         formData.totalSurface < 600 ? 'medium' : 'large') : undefined,
-      
-      // Données additionnelles pour référence
-      basementSurface: formData.basementSurface ? parseFloat(formData.basementSurface) : undefined,
-      balconyTerraceSurface: formData.balconyTerraceSurface ? parseFloat(formData.balconyTerraceSurface) : undefined,
-      outdoorParkingCount: formData.outdoorParkingCount ? parseInt(formData.outdoorParkingCount) : undefined,
-      indoorParkingCount: formData.indoorParkingCount ? parseInt(formData.indoorParkingCount) : undefined
+
+      houseExtras: formData.type === 'maison'
+        ? (formData.hasPool ? 'pool_or_quality_extras' : formData.hasBasement ? 'annex' : 'none')
+        : undefined,
+
+      plot: formData.type === 'maison' && formData.totalSurface
+        ? (formData.totalSurface < 300 ? 'small' : formData.totalSurface < 600 ? 'medium' : 'large')
+        : undefined
     };
-    
-    // Remove undefined values
-    return Object.fromEntries(Object.entries(chars).filter(([_, v]) => v !== undefined));
+
+    return Object.fromEntries(Object.entries(chars).filter(([, v]) => v !== undefined));
   };
 
-  // Envoyer le code OTP
-  const handleSendOTP = async () => {
-    if (!leadForm.phone) {
-      setOtpError('Veuillez saisir votre numéro de téléphone');
-      return;
-    }
-    
-    if (!leadForm.estimationReason) {
-      setOtpError('Veuillez indiquer la raison de votre estimation');
-      return;
-    }
-    
+  const postJson = async (url, body) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
+
+  const requestOTP = async (url) => {
     setLoading(true);
     setOtpError('');
-    
+    setOtpCode('');
     try {
-      const res = await fetch('/api/verification/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: leadForm.phone })
-      });
-      
-      const data = await res.json();
-      
+      const { res, data } = await postJson(url, { phone: leadForm.phone });
       if (!res.ok) {
-        setOtpError(data.error || 'Erreur lors de l\'envoi du code');
-        setLoading(false);
+        setOtpError(data.error || "Erreur lors de l'envoi du code");
         return;
       }
-      
-      // Si bypass
       if (data.bypass) {
         setPhoneVerified(true);
         setOtpStep('verified');
-        setLoading(false);
+        runEstimation();
         return;
       }
-      
-      // Passer à l'étape OTP
       setOtpStep('otp');
       setOtpCountdown(60);
-      
-      // Démarrer le compte à rebours
-      const interval = setInterval(() => {
-        setOtpCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
     } catch (error) {
       console.error('OTP send error:', error);
-      setOtpError('Erreur lors de l\'envoi du code');
+      setOtpError("Erreur lors de l'envoi du code");
     } finally {
       setLoading(false);
     }
   };
-  
-  // Vérifier le code OTP
-  const handleVerifyOTP = async () => {
-    if (otpCode.length !== 6) {
+
+  const handleSendOTP = (e) => {
+    e?.preventDefault();
+    if (!leadForm.phone) return setOtpError('Veuillez saisir votre numéro de téléphone');
+    if (!leadForm.estimationReason) return setOtpError('Veuillez indiquer votre projet');
+    // Téléphone déjà vérifié (nouvelle estimation dans la même session) : pas de nouveau SMS
+    if (phoneVerified) {
+      setOtpStep('verified');
+      runEstimation();
+      return;
+    }
+    requestOTP('/api/verification/send-otp');
+  };
+
+  const handleVerifyOTP = async (code = otpCode) => {
+    if (code.length !== 6) {
       setOtpError('Veuillez saisir le code à 6 chiffres');
       return;
     }
-    
     setLoading(true);
     setOtpError('');
-    
     try {
-      const res = await fetch('/api/verification/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          phone: leadForm.phone,
-          code: otpCode 
-        })
-      });
-      
-      const data = await res.json();
-      
+      const { res, data } = await postJson('/api/verification/verify-otp', { phone: leadForm.phone, code });
       if (!res.ok) {
         setOtpError(data.error || 'Code invalide');
         setOtpCode('');
-        setLoading(false);
         return;
       }
-      
-      // Vérification réussie
       setPhoneVerified(true);
       setOtpStep('verified');
-      
+      runEstimation();
     } catch (error) {
       console.error('OTP verify error:', error);
       setOtpError('Erreur lors de la vérification');
@@ -251,1061 +312,824 @@ export default function App() {
       setLoading(false);
     }
   };
-  
-  // Renvoyer le code OTP
-  const handleResendOTP = async () => {
-    setLoading(true);
-    setOtpError('');
-    setOtpCode('');
-    
-    try {
-      const res = await fetch('/api/verification/resend-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: leadForm.phone })
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        setOtpError(data.error || 'Erreur lors du renvoi du code');
-        setLoading(false);
-        return;
-      }
-      
-      // Réinitialiser le compte à rebours
-      setOtpCountdown(60);
-      const interval = setInterval(() => {
-        setOtpCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
-    } catch (error) {
-      console.error('OTP resend error:', error);
-      setOtpError('Erreur lors du renvoi du code');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleEstimate = async () => {
-    if (!phoneVerified) {
-      setOtpError('Veuillez vérifier votre numéro de téléphone');
-      return;
-    }
-    
+  // 1. enregistre le lead, 2. calcule l'estimation rattachée à ce lead
+  const runEstimation = async () => {
     setLoading(true);
-    
-    // Tracker la conversion Google Ads
+    setEstimateError('');
+
     if (typeof window !== 'undefined' && window.gtag_report_conversion) {
       window.gtag_report_conversion();
     }
-    
+
     try {
-      // 1. Enregistrer le lead IMMÉDIATEMENT
-      await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...leadForm,
-          property: formData,
-          status: 'pending_estimation', // Lead capturé, estimation en cours
-          phoneVerified: true
-        })
+      const lead = await postJson('/api/leads', {
+        ...leadForm,
+        property: formData,
+        source: embedded ? 'alteregopatrimoine-embed' : 'estimation'
       });
-      
-      // 2. Calculer l'estimation
-      const characteristics = mapToCharacteristics();
-      
-      const res = await fetch('/api/estimate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address: formData.address,
-          lat: formData.lat,
-          lng: formData.lng,
-          type: formData.type,
-          surface: parseFloat(formData.surface),
-          characteristics
-        })
+
+      if (lead.res.status === 403) {
+        // Vérification expirée : on redemande un code
+        setPhoneVerified(false);
+        setOtpStep('form');
+        setOtpError('Votre vérification a expiré, merci de confirmer à nouveau votre numéro.');
+        return;
+      }
+      if (!lead.res.ok) {
+        setOtpStep('form');
+        setOtpError(lead.data.error || "Impossible d'enregistrer votre demande.");
+        return;
+      }
+
+      const estimate = await postJson('/api/estimate', {
+        leadId: lead.data.leadId,
+        address: formData.address,
+        lat: formData.lat,
+        lng: formData.lng,
+        type: formData.type,
+        surface: parseFloat(formData.surface),
+        characteristics: mapToCharacteristics()
       });
-      
-      const data = await res.json();
-      setResults(data);
-      
-      // 3. Mettre à jour le lead avec l'estimation
-      await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...leadForm,
-          property: formData,
-          estimation: data,
-          status: 'estimation_complete',
-          phoneVerified: true
-        })
-      });
-      
-      setStep(7); // Afficher résultats
+
+      if (!estimate.res.ok) {
+        setEstimateError(estimate.data.error || "Le calcul de l'estimation a échoué.");
+        return;
+      }
+
+      setResults(estimate.data);
+      setStep(7);
+      if (typeof window !== 'undefined') {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({ event: 'estimation_complete', estimation_reason: leadForm.estimationReason, property_type: formData.type });
+      }
     } catch (error) {
       console.error('Estimation error:', error);
-      alert('Erreur lors de l\'estimation. Veuillez réessayer.');
+      setEstimateError("Erreur lors de l'estimation. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }
   };
 
- 
+  const resetEstimation = () => {
+    setFormData(INITIAL_FORM);
+    setResults(null);
+    setEstimateError('');
+    // On garde les coordonnées et la vérification du téléphone pour une nouvelle estimation
+    setOtpStep('form');
+    setOtpCode('');
+    setOtpError('');
+    setStep(1);
+  };
+
+  const step3Valid = formData.surface && parseFloat(formData.surface) > 0 && formData.rooms &&
+    (formData.type !== 'appartement' || (formData.floor !== '' && formData.floors !== '' && formData.hasElevator !== null));
+
+  const leadValid = leadForm.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadForm.email) &&
+    leadForm.phone && leadForm.estimationReason && leadForm.consent;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <img 
-              src="https://customer-assets.emergentagent.com/job_realprice-wizard/artifacts/h5ubvkxs_Valide%CC%81%20%2812%29.png" 
-              alt="AlterEgo" 
-              className="h-12 w-auto"
-            />
-            <div className="text-sm text-gray-600">
-              Accueil &gt; Estimation immobilière
-            </div>
+    <div ref={rootRef} className={`bg-ae-paper text-ae-ink ${embedded ? '' : 'min-h-screen flex flex-col'}`}>
+      {!embedded && (
+        <header className="border-b border-ae-line bg-ae-paper/90 backdrop-blur sticky top-0 z-30">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-4">
+            <a href={SITE_URL} aria-label="AlterEgo Patrimoine — accueil">
+              <img src="/brand/logo-alterego-noir.png" alt="AlterEgo" className="h-10 sm:h-12 w-auto" />
+            </a>
+            <a href={SITE_URL} className="hidden sm:inline-flex items-center gap-2 text-sm font-semibold text-ae-muted hover:text-ae-brique transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Retour au site
+            </a>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
-        {/* Étape 1: Adresse */}
+      <main className={`flex-1 ${embedded ? 'py-6' : 'py-10 sm:py-16'} ${step === 7 ? '!pb-0' : ''}`}>
+        {step >= 2 && step <= 6 && (
+          <StepHeader step={step} onBack={() => setStep(step - 1)} disabled={loading} />
+        )}
+
+        {/* Étape 1 : adresse */}
         {step === 1 && (
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <h2 className="text-5xl font-bold mb-4">Estimation immobilière gratuite en ligne</h2>
-              <p className="text-xl text-gray-600 mb-2">Estimation en 3 minutes</p>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Saisissez votre adresse pour obtenir votre estimation gratuite instantanément basée sur les données actuelles du marché.
+          <section className="mx-auto max-w-4xl px-4 sm:px-6">
+            <div className="text-center mb-10 sm:mb-12">
+              <p className="ae-eyebrow mb-5">Estimation immobilière gratuite</p>
+              <h1 className="ae-h1 mb-6">Combien vaut votre bien&nbsp;?</h1>
+              <p className="text-lg text-ae-muted max-w-2xl mx-auto">
+                Une première valeur en 3 minutes, calculée à partir des ventes réelles
+                enregistrées autour de chez vous. Un conseiller AlterEgo l'affine ensuite avec vous.
               </p>
             </div>
 
-            <Card className="p-8">
-              <Label className="text-lg mb-2 block font-semibold">Adresse du bien</Label>
+            <div className="ae-card p-5 sm:p-8">
+              <label htmlFor="address" className="ae-label">Adresse du bien</label>
               <div className="relative">
-                <Input
-                  placeholder="Ex: 2 rue des italiens, 75009 Paris"
+                <MapPin className="w-5 h-5 text-ae-muted absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="address"
+                  type="text"
+                  role="combobox"
+                  aria-expanded={showSuggestions && addressSuggestions.length > 0}
+                  aria-controls="address-suggestions"
+                  aria-autocomplete="list"
+                  autoComplete="off"
+                  placeholder="Ex. 2 rue des Italiens, 75009 Paris"
                   value={formData.address}
                   onChange={(e) => {
-                    setFormData({ ...formData, address: e.target.value });
+                    updateForm({ address: e.target.value, lat: null, lng: null });
                     searchAddress(e.target.value);
                   }}
-                  className="text-lg py-6"
+                  onKeyDown={onAddressKeyDown}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  className="ae-input pl-12 text-lg"
                 />
                 {showSuggestions && addressSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
+                  <ul
+                    id="address-suggestions"
+                    role="listbox"
+                    className="absolute z-20 w-full mt-2 bg-white border border-ae-line rounded-2xl shadow-xl overflow-hidden max-h-72 overflow-y-auto"
+                  >
                     {addressSuggestions.map((suggestion, idx) => (
-                      <button
-                        key={idx}
-                        className="w-full text-left px-4 py-3 hover:bg-gray-100 border-b last:border-b-0"
-                        onClick={() => selectAddress(suggestion)}
+                      <li
+                        key={`${suggestion.address}-${idx}`}
+                        role="option"
+                        aria-selected={idx === activeSuggestion}
+                        onMouseDown={(e) => { e.preventDefault(); selectAddress(suggestion); }}
+                        onMouseEnter={() => setActiveSuggestion(idx)}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-ae-line last:border-b-0 ${
+                          idx === activeSuggestion ? 'bg-ae-sand' : ''
+                        }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-gray-400" />
-                          <span>{suggestion.address}</span>
-                        </div>
+                        <MapPin className="w-4 h-4 text-ae-brique shrink-0" />
+                        <span>{suggestion.address}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {formData.address.length >= 3 && !formData.lat && !showSuggestions && (
+                <p className="text-sm text-ae-muted mt-2">Sélectionnez une adresse dans la liste proposée.</p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={!formData.lat}
+                className="ae-btn ae-btn-ink w-full mt-6"
+              >
+                Commencer l'estimation <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            <ul className="grid sm:grid-cols-3 gap-4 sm:gap-6 mt-10">
+              {[
+                { icon: LineChart, title: 'Ventes réelles', text: 'Données publiques DVF des notaires, pas des prix affichés.' },
+                { icon: Clock, title: '3 minutes', text: 'Quelques questions simples sur votre bien.' },
+                { icon: ShieldCheck, title: 'Sans engagement', text: 'Gratuit, et vos données ne sont jamais revendues.' }
+              ].map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex gap-4 items-start">
+                  <span className="w-10 h-10 rounded-full bg-ae-sand flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5 text-ae-brique" />
+                  </span>
+                  <div>
+                    <p className="font-semibold">{title}</p>
+                    <p className="text-sm text-ae-muted leading-relaxed">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Étape 2 : type de bien */}
+        {step === 2 && (
+          <StepSection title="S'agit-il d'une maison ou d'un appartement ?">
+            <div className="grid grid-cols-2 gap-4 sm:gap-6">
+              {[
+                { value: 'appartement', label: 'Appartement', icon: Building2 },
+                { value: 'maison', label: 'Maison', icon: Home }
+              ].map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={formData.type === value}
+                  onClick={() => {
+                    updateForm({ type: value });
+                    setStep(3);
+                  }}
+                  className="ae-choice p-6 sm:p-12 flex flex-col items-center gap-4"
+                >
+                  <Icon className="w-12 h-12 sm:w-16 sm:h-16" strokeWidth={1.25} />
+                  <span className="font-display text-xl sm:text-2xl">{label}</span>
+                </button>
+              ))}
+            </div>
+          </StepSection>
+        )}
+
+        {/* Étape 3 : caractéristiques principales */}
+        {step === 3 && (
+          <StepSection title="Les principales caractéristiques" subtitle="* Information obligatoire">
+            <form
+              className="ae-card p-5 sm:p-8 space-y-6"
+              onSubmit={(e) => { e.preventDefault(); if (step3Valid) setStep(4); }}
+            >
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field id="surface" label="Surface habitable (m²) *">
+                  <input id="surface" type="number" inputMode="decimal" min="5" placeholder="75" className="ae-input"
+                    value={formData.surface} onChange={(e) => updateForm({ surface: e.target.value })} />
+                </Field>
+                <Field id="totalSurface" label={formData.type === 'maison' ? 'Surface du terrain (m²)' : 'Surface totale, annexes comprises (m²)'}>
+                  <input id="totalSurface" type="number" inputMode="decimal" min="0" placeholder={formData.type === 'maison' ? '500' : '80'} className="ae-input"
+                    value={formData.totalSurface} onChange={(e) => updateForm({ totalSurface: e.target.value })} />
+                </Field>
+                <Field id="rooms" label="Nombre de pièces *" hint="Hors cuisine et salle de bains">
+                  <input id="rooms" type="number" inputMode="numeric" min="1" placeholder="3" className="ae-input"
+                    value={formData.rooms} onChange={(e) => updateForm({ rooms: e.target.value })} />
+                </Field>
+                <Field id="bathrooms" label="Salles de bains / d'eau">
+                  <input id="bathrooms" type="number" inputMode="numeric" min="0" placeholder="1" className="ae-input"
+                    value={formData.bathrooms} onChange={(e) => updateForm({ bathrooms: e.target.value })} />
+                </Field>
+
+                {formData.type === 'appartement' && (
+                  <>
+                    <Field id="floor" label="Étage du bien *" hint="0 pour un rez-de-chaussée">
+                      <input id="floor" type="number" inputMode="numeric" min="0" placeholder="2" className="ae-input"
+                        value={formData.floor} onChange={(e) => updateForm({ floor: e.target.value })} />
+                    </Field>
+                    <Field id="floors" label="Nombre d'étages de l'immeuble *">
+                      <input id="floors" type="number" inputMode="numeric" min="0" placeholder="5" className="ae-input"
+                        value={formData.floors} onChange={(e) => updateForm({ floors: e.target.value })} />
+                    </Field>
+                    <fieldset className="sm:col-span-2">
+                      <legend className="ae-label">Ascenseur *</legend>
+                      <div className="grid grid-cols-2 gap-3 max-w-sm">
+                        {[{ value: true, label: 'Oui' }, { value: false, label: 'Non' }].map(opt => (
+                          <button key={opt.label} type="button" aria-pressed={formData.hasElevator === opt.value}
+                            onClick={() => updateForm({ hasElevator: opt.value })}
+                            className="ae-choice py-3 font-semibold">
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </>
+                )}
+              </div>
+
+              <button type="submit" disabled={!step3Valid} className="ae-btn ae-btn-ink w-full">
+                Continuer <ArrowRight className="w-5 h-5" />
+              </button>
+            </form>
+          </StepSection>
+        )}
+
+        {/* Étape 4 : atouts */}
+        {step === 4 && (
+          <StepSection title="Les atouts du bien" subtitle="Facultatif, mais chaque détail rend l'estimation plus précise.">
+            <div className="ae-card p-5 sm:p-8 space-y-8">
+              <div className="space-y-3">
+                <ExtraOption
+                  label={formData.type === 'maison' ? 'Sous-sol ou dépendance' : 'Cave ou sous-sol'}
+                  checked={formData.hasBasement}
+                  onToggle={(checked) => updateForm({ hasBasement: checked, basementSurface: checked ? formData.basementSurface : '' })}
+                  value={formData.basementSurface}
+                  onValue={(v) => updateForm({ basementSurface: v })}
+                  unit="m²"
+                />
+                <ExtraOption
+                  label={formData.type === 'maison' ? 'Terrasse' : 'Balcon ou terrasse'}
+                  checked={formData.hasBalconyTerrace}
+                  onToggle={(checked) => updateForm({ hasBalconyTerrace: checked, balconyTerraceSurface: checked ? formData.balconyTerraceSurface : '' })}
+                  value={formData.balconyTerraceSurface}
+                  onValue={(v) => updateForm({ balconyTerraceSurface: v })}
+                  unit="m²"
+                />
+                <ExtraOption
+                  label="Stationnement extérieur"
+                  checked={formData.hasOutdoorParking}
+                  onToggle={(checked) => updateForm({ hasOutdoorParking: checked, outdoorParkingCount: checked ? formData.outdoorParkingCount : '' })}
+                  value={formData.outdoorParkingCount}
+                  onValue={(v) => updateForm({ outdoorParkingCount: v })}
+                  unit="place(s)"
+                />
+                <ExtraOption
+                  label="Garage ou parking couvert"
+                  checked={formData.hasIndoorParking}
+                  onToggle={(checked) => updateForm({ hasIndoorParking: checked, indoorParkingCount: checked ? formData.indoorParkingCount : '' })}
+                  value={formData.indoorParkingCount}
+                  onValue={(v) => updateForm({ indoorParkingCount: v })}
+                  unit="place(s)"
+                />
+                {formData.type === 'maison' && (
+                  <ExtraOption
+                    label="Piscine"
+                    checked={formData.hasPool}
+                    onToggle={(checked) => updateForm({ hasPool: checked })}
+                  />
+                )}
+              </div>
+
+              <fieldset>
+                <legend className="ae-label">Vue</legend>
+                <p className="text-sm text-ae-muted mb-3">Une vue exceptionnelle : monument, mer, montagne…</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {VIEW_OPTIONS.map(opt => (
+                    <button key={opt.value} type="button" aria-pressed={formData.view === opt.value}
+                      onClick={() => updateForm({ view: formData.view === opt.value ? '' : opt.value })}
+                      className="ae-choice py-3 px-2 text-sm sm:text-base font-semibold">
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <button type="button" onClick={() => setStep(5)} className="ae-btn ae-btn-ink w-full">
+                Continuer <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </StepSection>
+        )}
+
+        {/* Étape 5 : état */}
+        {step === 5 && (
+          <StepSection title="Son état général" subtitle="Facultatif, mais chaque détail rend l'estimation plus précise.">
+            <div className="ae-card p-5 sm:p-8 space-y-8">
+              <div className="grid sm:grid-cols-2 gap-6">
+                <Field id="yearBuilt" label="Année de construction">
+                  <input id="yearBuilt" type="number" inputMode="numeric" min="1500" max={new Date().getFullYear()} placeholder="1980" className="ae-input"
+                    value={formData.yearBuilt} onChange={(e) => updateForm({ yearBuilt: e.target.value })} />
+                </Field>
+
+                <fieldset>
+                  <legend className="ae-label">Diagnostic énergétique (DPE)</legend>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {Object.keys(DPE_COLORS).map(letter => (
+                      <button key={letter} type="button" aria-pressed={formData.dpe === letter}
+                        aria-label={`DPE ${letter}`}
+                        onClick={() => updateForm({ dpe: formData.dpe === letter ? '' : letter })}
+                        className="ae-choice relative h-12 font-display text-lg overflow-hidden">
+                        <span className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: DPE_COLORS[letter] }} />
+                        {letter}
                       </button>
                     ))}
                   </div>
-                )}
+                  <p className="text-xs text-ae-muted mt-2">Laissez vide si vous ne le connaissez pas.</p>
+                </fieldset>
               </div>
 
-              <Button
-                onClick={() => formData.lat && setStep(2)}
-                disabled={!formData.lat}
-                className="w-full mt-6 bg-black hover:bg-gray-800 text-white py-6 text-lg"
-              >
-                Continuer <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Card>
-          </div>
-        )}
+              <fieldset>
+                <legend className="ae-label">Comment évaluez-vous son état&nbsp;?</legend>
+                <div className="grid grid-cols-5 gap-2 sm:gap-3">
+                  {STANDING_LEVELS.map(level => (
+                    <button key={level.value} type="button" aria-pressed={formData.standing === level.value}
+                      onClick={() => updateForm({ standing: level.value })}
+                      className="ae-choice py-4 px-1 flex flex-col items-center gap-1">
+                      <span className="font-display text-2xl">{level.value}</span>
+                      <span className="text-[11px] sm:text-xs font-semibold text-ae-muted leading-tight text-center">{level.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-center mt-3 text-sm text-ae-muted">
+                  Le bien {STANDING_LEVELS.find(l => l.value === formData.standing)?.sentence}.
+                </p>
+              </fieldset>
 
-        {/* Étape 2: Type de bien */}
-        {step === 2 && (
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setStep(1)} variant="outline" className="mb-6">← Retour</Button>
-            
-            <h2 className="text-3xl font-bold mb-8">S'agit-il d'une maison ou d'un appartement ?</h2>
-            
-            <div className="grid grid-cols-2 gap-6">
-              <button
-                onClick={() => {
-                  setFormData({ ...formData, type: 'appartement' });
-                  setStep(3);
-                }}
-                className="p-12 border-2 rounded-xl hover:border-black transition-all bg-white shadow-sm hover:shadow-md"
-              >
-                <Building2 className="w-20 h-20 mx-auto mb-4" />
-                <div className="text-2xl font-bold">Appartement</div>
-              </button>
-              <button
-                onClick={() => {
-                  setFormData({ ...formData, type: 'maison' });
-                  setStep(3);
-                }}
-                className="p-12 border-2 rounded-xl hover:border-black transition-all bg-white shadow-sm hover:shadow-md"
-              >
-                <Home className="w-20 h-20 mx-auto mb-4" />
-                <div className="text-2xl font-bold">Maison</div>
+              <button type="button" onClick={() => setStep(6)} className="ae-btn ae-btn-ink w-full">
+                Continuer <ArrowRight className="w-5 h-5" />
               </button>
             </div>
-          </div>
+          </StepSection>
         )}
 
-        {/* Étape 3: Caractéristiques principales */}
-        {step === 3 && (
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setStep(2)} variant="outline" className="mb-6">← Retour</Button>
-            
-            <Card className="p-8">
-              <h2 className="text-3xl font-bold mb-2">Quelles sont les principales caractéristiques du bien ?</h2>
-              <p className="text-sm text-gray-600 mb-6">*Information obligatoire</p>
-              
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <Label>Surface habitable (m²) *</Label>
-                    <Input
-                      type="number"
-                      placeholder="120"
-                      value={formData.surface}
-                      onChange={(e) => setFormData({ ...formData, surface: e.target.value })}
-                      className="mt-2"
-                    />
+        {/* Étape 6 : coordonnées + vérification SMS */}
+        {step === 6 && (
+          <StepSection
+            title="Votre estimation est presque prête"
+            subtitle="Indiquez où vous l'envoyer. Un conseiller AlterEgo pourra ensuite l'affiner avec vous, sans engagement."
+          >
+            <div className="ae-card p-5 sm:p-8">
+              {otpStep === 'form' && (
+                <form className="space-y-5" onSubmit={handleSendOTP} noValidate>
+                  <Field id="name" label="Nom complet *">
+                    <input id="name" autoComplete="name" placeholder="Jean Dupont" className="ae-input"
+                      value={leadForm.name} onChange={(e) => updateLead({ name: e.target.value })} />
+                  </Field>
+                  <div className="grid sm:grid-cols-2 gap-5">
+                    <Field id="email" label="Email *">
+                      <input id="email" type="email" autoComplete="email" placeholder="jean.dupont@email.fr" className="ae-input"
+                        value={leadForm.email} onChange={(e) => updateLead({ email: e.target.value })} />
+                    </Field>
+                    <Field id="phone" label="Téléphone mobile *" hint={phoneVerified ? 'Numéro déjà vérifié' : 'Un code de vérification vous sera envoyé par SMS'}>
+                      <input id="phone" type="tel" autoComplete="tel" placeholder="06 12 34 56 78" className="ae-input"
+                        value={leadForm.phone}
+                        onChange={(e) => {
+                          updateLead({ phone: e.target.value });
+                          setPhoneVerified(false);
+                        }} />
+                    </Field>
                   </div>
-                  
-                  <div>
-                    <Label>{formData.type === 'maison' ? 'Superficie totale terrain (m²)' : 'Superficie totale (m²)'}</Label>
-                    <Input
-                      type="number"
-                      placeholder="200"
-                      value={formData.totalSurface}
-                      onChange={(e) => setFormData({ ...formData, totalSurface: e.target.value })}
-                      className="mt-2"
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      Nombre de pièces *
-                      <Info className="w-4 h-4 text-gray-400" />
-                    </Label>
-                    <Input
-                      type="number"
-                      placeholder="4"
-                      value={formData.rooms}
-                      onChange={(e) => setFormData({ ...formData, rooms: e.target.value })}
-                      className="mt-2"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      Nombre de salles de bains *
-                      <Info className="w-4 h-4 text-gray-400" />
-                    </Label>
-                    <Input
-                      type="number"
-                      placeholder="2"
-                      value={formData.bathrooms}
-                      onChange={(e) => setFormData({ ...formData, bathrooms: e.target.value })}
-                      className="mt-2"
-                    />
-                  </div>
-                </div>
-                
-                {formData.type === 'appartement' && (
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <Label>À quel étage ? *</Label>
-                      <Input
-                        type="number"
-                        placeholder="3"
-                        value={formData.floor}
-                        onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                        className="mt-2"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Nombre d'étages dans le bâtiment *</Label>
-                      <Input
-                        type="number"
-                        placeholder="5"
-                        value={formData.floors}
-                        onChange={(e) => setFormData({ ...formData, floors: e.target.value })}
-                        className="mt-2"
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                <Button
-                  onClick={() => setStep(4)}
-                  disabled={!formData.surface || !formData.rooms || !formData.bathrooms || (formData.type === 'appartement' && (!formData.floor || !formData.floors))}
-                  className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                >
-                  Continuer <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
 
-        {/* Étape 4: Avantages supplémentaires */}
-        {step === 4 && (
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setStep(3)} variant="outline" className="mb-6">← Retour</Button>
-            
-            <Card className="p-8">
-              <h2 className="text-3xl font-bold mb-2">Quels sont les avantages supplémentaires offerts par le lieu ?</h2>
-              <p className="text-sm text-gray-600 mb-6">Ces informations sont facultatives mais permettent une estimation plus précise.</p>
-              
-              <div className="space-y-6">
-                {/* Checkboxes avec inputs conditionnels */}
-                <div className="space-y-4">
-                  {/* Sous-sol */}
-                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.hasBasement}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          hasBasement: e.target.checked,
-                          basementSurface: e.target.checked ? formData.basementSurface : ''
-                        })}
-                        className="w-5 h-5 mt-1"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">Sous-sol</span>
-                        {formData.hasBasement && (
-                          <div className="mt-3 flex items-center gap-3">
-                            <Input
-                              type="number"
-                              placeholder="Surface"
-                              value={formData.basementSurface}
-                              onChange={(e) => setFormData({ ...formData, basementSurface: e.target.value })}
-                              className="w-32"
-                            />
-                            <span className="text-gray-600">m²</span>
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                  
-                  {/* Balcon ou terrasse */}
-                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.hasBalconyTerrace}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          hasBalconyTerrace: e.target.checked,
-                          balconyTerraceSurface: e.target.checked ? formData.balconyTerraceSurface : ''
-                        })}
-                        className="w-5 h-5 mt-1"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">Balcon ou terrasse</span>
-                        {formData.hasBalconyTerrace && (
-                          <div className="mt-3 flex items-center gap-3">
-                            <Input
-                              type="number"
-                              placeholder="Surface"
-                              value={formData.balconyTerraceSurface}
-                              onChange={(e) => setFormData({ ...formData, balconyTerraceSurface: e.target.value })}
-                              className="w-32"
-                            />
-                            <span className="text-gray-600">m²</span>
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                  
-                  {/* Parking extérieur */}
-                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.hasOutdoorParking}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          hasOutdoorParking: e.target.checked,
-                          outdoorParkingCount: e.target.checked ? formData.outdoorParkingCount : ''
-                        })}
-                        className="w-5 h-5 mt-1"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">Place de parking extérieur</span>
-                        {formData.hasOutdoorParking && (
-                          <div className="mt-3 flex items-center gap-3">
-                            <Input
-                              type="number"
-                              placeholder="Nombre"
-                              value={formData.outdoorParkingCount}
-                              onChange={(e) => setFormData({ ...formData, outdoorParkingCount: e.target.value })}
-                              className="w-32"
-                              min="1"
-                            />
-                            <span className="text-gray-600">place(s)</span>
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                  
-                  {/* Parking intérieur */}
-                  <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.hasIndoorParking}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          hasIndoorParking: e.target.checked,
-                          indoorParkingCount: e.target.checked ? formData.indoorParkingCount : ''
-                        })}
-                        className="w-5 h-5 mt-1"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">Place de parking intérieur</span>
-                        {formData.hasIndoorParking && (
-                          <div className="mt-3 flex items-center gap-3">
-                            <Input
-                              type="number"
-                              placeholder="Nombre"
-                              value={formData.indoorParkingCount}
-                              onChange={(e) => setFormData({ ...formData, indoorParkingCount: e.target.value })}
-                              className="w-32"
-                              min="1"
-                            />
-                            <span className="text-gray-600">place(s)</span>
-                          </div>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                  
-                  {/* Piscine (maison uniquement) */}
-                  {formData.type === 'maison' && (
-                    <div className="border rounded-lg p-4 hover:bg-gray-50 transition-all">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.hasPool}
-                          onChange={(e) => setFormData({ ...formData, hasPool: e.target.checked })}
-                          className="w-5 h-5"
-                        />
-                        <span className="font-medium">Piscine</span>
-                      </label>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Vue */}
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">Vue</Label>
-                  <p className="text-sm text-gray-600 mb-3">Exemples de vues exceptionnelles : Monument, montagne, plage.</p>
-                  <div className="grid grid-cols-3 gap-4">
-                    <button
-                      onClick={() => setFormData({ ...formData, view: 'vis_a_vis' })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        formData.view === 'vis_a_vis'
-                          ? 'border-black bg-gray-50 font-semibold'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      Vis-à-vis
-                    </button>
-                    <button
-                      onClick={() => setFormData({ ...formData, view: 'degagee' })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        formData.view === 'degagee'
-                          ? 'border-black bg-gray-50 font-semibold'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      Dégagée
-                    </button>
-                    <button
-                      onClick={() => setFormData({ ...formData, view: 'exceptionnelle' })}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        formData.view === 'exceptionnelle'
-                          ? 'border-black bg-gray-50 font-semibold'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      Exceptionnelle
-                    </button>
-                  </div>
-                </div>
-                
-                <Button
-                  onClick={() => setStep(5)}
-                  className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                >
-                  Continuer <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* Étape 5: État du bien */}
-        {step === 5 && (
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setStep(4)} variant="outline" className="mb-6">← Retour</Button>
-            
-            <Card className="p-8">
-              <h2 className="text-3xl font-bold mb-2">Comment évaluez-vous son état ?</h2>
-              <p className="text-sm text-gray-600 mb-6">Ces informations sont facultatives mais permettent une estimation plus précise.</p>
-              
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <Label>Année de construction</Label>
-                    <Input
-                      type="number"
-                      placeholder="1980"
-                      value={formData.yearBuilt}
-                      onChange={(e) => setFormData({ ...formData, yearBuilt: e.target.value })}
-                      className="mt-2"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label>Diagnostic énergétique (DPE)</Label>
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                      {['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(dpe => (
-                        <button
-                          key={dpe}
-                          onClick={() => setFormData({ ...formData, dpe })}
-                          className={`p-3 border-2 rounded-lg font-bold transition-all ${
-                            formData.dpe === dpe
-                              ? 'border-black bg-gray-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          } ${['A', 'B', 'C'].includes(dpe) ? 'bg-green-50' : ''}
-                          ${['F', 'G'].includes(dpe) ? 'bg-red-50' : ''}`}
-                        >
-                          {dpe}
+                  <fieldset>
+                    <legend className="ae-label">Votre projet *</legend>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: 'Vendre', label: 'Vendre', text: 'Je souhaite vendre ce bien' },
+                        { value: 'Acheter', label: 'Acheter', text: "J'envisage d'acheter ce bien" }
+                      ].map(opt => (
+                        <button key={opt.value} type="button" aria-pressed={leadForm.estimationReason === opt.value}
+                          onClick={() => updateLead({ estimationReason: opt.value })}
+                          className="ae-choice p-4 text-left">
+                          <span className="block font-semibold">{opt.label}</span>
+                          <span className="block text-sm text-ae-muted mt-0.5">{opt.text}</span>
                         </button>
                       ))}
                     </div>
-                  </div>
-                </div>
-                
-                {/* Standing */}
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">Évaluez le standing de votre propriété</Label>
-                  <div className="flex items-center justify-between gap-4 p-6 bg-gray-50 rounded-lg">
-                    {[1, 2, 3, 4, 5].map(level => (
-                      <button
-                        key={level}
-                        onClick={() => setFormData({ ...formData, standing: level })}
-                        className={`flex-1 p-4 rounded-lg border-2 transition-all ${
-                          formData.standing === level
-                            ? 'border-black bg-white shadow-md scale-105'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="text-3xl mb-2">
-                          {level === 1 ? '😟' : level === 2 ? '😐' : level === 3 ? '🙂' : level === 4 ? '😊' : '🤩'}
-                        </div>
-                        <div className="text-xs font-semibold">
-                          {level === 1 ? 'À rénover' : level === 2 ? 'Moyen' : level === 3 ? 'Bon' : level === 4 ? 'Très bon' : 'Excellent'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  {formData.standing && (
-                    <p className="text-center mt-3 text-sm text-gray-600">
-                      La propriété est en {formData.standing === 1 ? 'état nécessitant rénovation' : formData.standing === 2 ? 'état moyen' : formData.standing === 3 ? 'bon état' : formData.standing === 4 ? 'très bon état' : 'excellent état'} !
+                  </fieldset>
+
+                  <label htmlFor="consent" className="flex items-start gap-3 p-4 rounded-2xl bg-ae-sand cursor-pointer">
+                    <input id="consent" type="checkbox" className="ae-checkbox mt-0.5"
+                      checked={leadForm.consent} onChange={(e) => updateLead({ consent: e.target.checked })} />
+                    <span className="text-sm text-ae-muted leading-relaxed">
+                      J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée
+                      et bénéficier d'un accompagnement personnalisé dans mon projet immobilier. *
+                    </span>
+                  </label>
+
+                  {otpError && <ErrorMessage>{otpError}</ErrorMessage>}
+
+                  <button type="submit" disabled={!leadValid || loading} className="ae-btn ae-btn-brique w-full">
+                    {loading
+                      ? <><Loader2 className="w-5 h-5 animate-spin" /> Envoi du code…</>
+                      : <>Recevoir mon estimation <ArrowRight className="w-5 h-5" /></>}
+                  </button>
+                </form>
+              )}
+
+              {otpStep === 'otp' && (
+                <div className="space-y-6 text-center">
+                  <div>
+                    <h3 className="ae-h3 mb-2">Vérifiez votre téléphone</h3>
+                    <p className="text-ae-muted">
+                      Saisissez le code à 6 chiffres envoyé au <strong className="text-ae-ink">{leadForm.phone}</strong>
                     </p>
-                  )}
-                </div>
-                
-                <Button
-                  onClick={() => setStep(6)}
-                  className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                >
-                  Continuer <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
+                  </div>
 
-        {/* Étape 6: FORMULAIRE LEAD AVEC VÉRIFICATION OTP */}
-        {step === 6 && (
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setStep(5)} variant="outline" className="mb-6">← Retour</Button>
-            
-            <Card className="p-8 bg-gradient-to-br from-gray-50 to-white border-2">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-green-500 rounded-full mx-auto mb-4 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 className="text-4xl font-bold mb-3">🎯 Votre estimation est prête !</h2>
-                <p className="text-xl text-gray-600 mb-2">
-                  Pour consulter <strong>gratuitement</strong> votre estimation détaillée et bénéficier d'un accompagnement personnalisé
-                </p>
-                <p className="text-gray-500">
-                  Un expert immobilier vous contactera pour affiner votre estimation et vous conseiller
-                </p>
-              </div>
-
-              <div className="max-w-md mx-auto space-y-4 mb-6">
-                {/* Formulaire de base */}
-                {otpStep === 'form' && (
-                  <>
-                    <div>
-                      <Label className="font-semibold">Nom complet *</Label>
-                      <Input
-                        placeholder="Ex: Jean Dupont"
-                        value={leadForm.name}
-                        onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                        className="mt-2"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label className="font-semibold">Email *</Label>
-                      <Input
-                        type="email"
-                        placeholder="Ex: jean.dupont@email.com"
-                        value={leadForm.email}
-                        onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
-                        className="mt-2"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label className="font-semibold">Téléphone *</Label>
-                      <Input
-                        type="tel"
-                        placeholder="Ex: 06 12 34 56 78"
-                        value={leadForm.phone}
-                        onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
-                        className="mt-2"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Un code de vérification sera envoyé par SMS
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="font-semibold mb-3 block">Raison de l'estimation *</Label>
-                      <div className="grid grid-cols-2 gap-4">
-                        <button
-                          type="button"
-                          onClick={() => setLeadForm({ ...leadForm, estimationReason: 'Acheter' })}
-                          className={`p-4 border-2 rounded-xl transition-all text-center ${
-                            leadForm.estimationReason === 'Acheter'
-                              ? 'border-black bg-gray-50 font-semibold shadow-md'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="text-2xl mb-2">🏠</div>
-                          <div className="font-medium">Acheter</div>
-                          <div className="text-xs text-gray-500 mt-1">Je cherche à acheter</div>
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={() => setLeadForm({ ...leadForm, estimationReason: 'Vendre' })}
-                          className={`p-4 border-2 rounded-xl transition-all text-center ${
-                            leadForm.estimationReason === 'Vendre'
-                              ? 'border-black bg-gray-50 font-semibold shadow-md'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="text-2xl mb-2">💰</div>
-                          <div className="font-medium">Vendre</div>
-                          <div className="text-xs text-gray-500 mt-1">Je veux vendre mon bien</div>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-                      <input
-                        type="checkbox"
-                        checked={leadForm.consent}
-                        onChange={(e) => setLeadForm({ ...leadForm, consent: e.target.checked })}
-                        className="mt-1 w-5 h-5"
-                        id="consent"
-                      />
-                      <label htmlFor="consent" className="text-sm text-gray-700">
-                        J'accepte d'être contacté par AlterEgo et ses partenaires pour recevoir mon estimation détaillée et bénéficier d'un accompagnement personnalisé dans mon projet de vente. *
-                      </label>
-                    </div>
-                    
-                    {otpError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                        {otpError}
-                      </div>
-                    )}
-                    
-                    <Button
-                      onClick={handleSendOTP}
-                      disabled={!leadForm.name || !leadForm.email || !leadForm.phone || !leadForm.estimationReason || !leadForm.consent || loading}
-                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                    >
-                      {loading ? (
-                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Envoi du code...</>
-                      ) : (
-                        <>Continuer <ArrowRight className="w-5 h-5 ml-2" /></>
-                      )}
-                    </Button>
-                  </>
-                )}
-
-                {/* Étape de vérification OTP */}
-                {otpStep === 'otp' && (
-                  <div className="space-y-6">
-                    <div className="text-center space-y-2">
-                      <h3 className="text-xl font-semibold">Vérifiez votre téléphone</h3>
-                      <p className="text-sm text-gray-600">
-                        Nous avons envoyé un code à 6 chiffres au <strong>{leadForm.phone}</strong>
-                      </p>
-                    </div>
-
-                    <div className="flex justify-center">
-                      <InputOTP
-                        maxLength={6}
-                        value={otpCode}
-                        onChange={(value) => {
-                          setOtpCode(value);
-                          setOtpError('');
-                        }}
-                        disabled={loading}
-                      >
-                        <InputOTPGroup>
-                          <InputOTPSlot index={0} />
-                          <InputOTPSlot index={1} />
-                          <InputOTPSlot index={2} />
-                        </InputOTPGroup>
-                        <InputOTPSeparator />
-                        <InputOTPGroup>
-                          <InputOTPSlot index={3} />
-                          <InputOTPSlot index={4} />
-                          <InputOTPSlot index={5} />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-
-                    {otpError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm text-center">
-                        {otpError}
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={handleVerifyOTP}
-                      disabled={otpCode.length !== 6 || loading}
-                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                    >
-                      {loading ? (
-                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Vérification...</>
-                      ) : (
-                        <>Vérifier le code</>
-                      )}
-                    </Button>
-
-                    <div className="text-center border-t pt-4">
-                      <button
-                        onClick={handleResendOTP}
-                        disabled={otpCountdown > 0 || loading}
-                        className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed"
-                      >
-                        {otpCountdown > 0 ? (
-                          `Renvoyer le code dans ${otpCountdown}s`
-                        ) : (
-                          <>
-                            <RotateCcw className="inline w-4 h-4 mr-1" />
-                            Renvoyer le code
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setOtpStep('form');
-                        setOtpCode('');
+                  <div className="flex justify-center">
+                    <InputOTP
+                      maxLength={6}
+                      value={otpCode}
+                      autoFocus
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      onChange={(value) => {
+                        setOtpCode(value);
                         setOtpError('');
+                        if (value.length === 6) handleVerifyOTP(value);
                       }}
-                      className="text-sm text-gray-600 hover:text-gray-800 underline w-full text-center"
+                      disabled={loading}
                     >
-                      Modifier mon numéro de téléphone
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} className="h-12 w-11 text-lg bg-white" />
+                        <InputOTPSlot index={1} className="h-12 w-11 text-lg bg-white" />
+                        <InputOTPSlot index={2} className="h-12 w-11 text-lg bg-white" />
+                      </InputOTPGroup>
+                      <InputOTPSeparator />
+                      <InputOTPGroup>
+                        <InputOTPSlot index={3} className="h-12 w-11 text-lg bg-white" />
+                        <InputOTPSlot index={4} className="h-12 w-11 text-lg bg-white" />
+                        <InputOTPSlot index={5} className="h-12 w-11 text-lg bg-white" />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+
+                  {otpError && <ErrorMessage>{otpError}</ErrorMessage>}
+
+                  <button type="button" onClick={() => handleVerifyOTP()} disabled={otpCode.length !== 6 || loading}
+                    className="ae-btn ae-btn-ink w-full">
+                    {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Vérification…</> : 'Valider le code'}
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 pt-2 text-sm">
+                    <button type="button" onClick={() => requestOTP('/api/verification/resend-otp')}
+                      disabled={otpCountdown > 0 || loading}
+                      className="inline-flex items-center gap-1.5 font-semibold text-ae-ink hover:text-ae-brique disabled:text-ae-muted disabled:cursor-not-allowed">
+                      <RotateCcw className="w-4 h-4" />
+                      {otpCountdown > 0 ? `Renvoyer le code (${otpCountdown} s)` : 'Renvoyer le code'}
+                    </button>
+                    <button type="button"
+                      onClick={() => { setOtpStep('form'); setOtpCode(''); setOtpError(''); }}
+                      className="text-ae-muted underline underline-offset-4 hover:text-ae-ink">
+                      Modifier mon numéro
                     </button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Téléphone vérifié */}
-                {otpStep === 'verified' && (
-                  <div className="space-y-6">
-                    <div className="text-center space-y-3 p-6 bg-green-50 rounded-lg border-2 border-green-200">
-                      <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto" />
-                      <h3 className="text-xl font-semibold text-green-800">Téléphone vérifié !</h3>
-                      <p className="text-sm text-green-700">
-                        Votre numéro <strong>{leadForm.phone}</strong> a été vérifié avec succès
-                      </p>
-                    </div>
-
-                    <div className="space-y-2 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
-                      <p><strong>Nom :</strong> {leadForm.name}</p>
-                      <p><strong>Email :</strong> {leadForm.email}</p>
-                      <p><strong>Téléphone :</strong> {leadForm.phone}</p>
-                      <p>
-                        <strong>Raison :</strong>{' '}
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          leadForm.estimationReason === 'Vendre' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {leadForm.estimationReason === 'Vendre' ? '💰 Vendre' : '🏠 Acheter'}
-                        </span>
-                      </p>
-                    </div>
-
-                    {otpError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                        {otpError}
+              {otpStep === 'verified' && (
+                <div className="text-center py-6 space-y-5">
+                  {estimateError ? (
+                    <>
+                      <ErrorMessage>{estimateError}</ErrorMessage>
+                      <button type="button" onClick={runEstimation} disabled={loading} className="ae-btn ae-btn-ink">
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />} Réessayer
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-14 h-14 rounded-full bg-ae-sauge mx-auto flex items-center justify-center">
+                        <Check className="w-7 h-7" />
+                      </span>
+                      <div>
+                        <h3 className="ae-h3 mb-2">Numéro vérifié</h3>
+                        <p className="text-ae-muted inline-flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Analyse des ventes autour de votre bien…
+                        </p>
                       </div>
-                    )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
 
-                    <Button
-                      onClick={handleEstimate}
-                      disabled={loading}
-                      className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
-                    >
-                      {loading ? (
-                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Calcul en cours...</>
-                      ) : (
-                        <>Voir mon estimation gratuite <ArrowRight className="w-5 h-5 ml-2" /></>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <div className="text-center space-y-2 text-sm text-gray-500">
-                <p>✓ Estimation 100% gratuite et sans engagement</p>
-                <p>✓ Basée sur les données officielles DVF</p>
-                <p>✓ Accompagnement par un expert local</p>
-              </div>
-            </Card>
-          </div>
+            <ul className="flex flex-col sm:flex-row sm:justify-center gap-2 sm:gap-6 mt-6 text-sm text-ae-muted">
+              {['Gratuit et sans engagement', 'Basée sur les ventes réelles DVF', 'Un conseiller près de chez vous'].map(t => (
+                <li key={t} className="inline-flex items-center gap-2"><Check className="w-4 h-4 text-ae-brique" /> {t}</li>
+              ))}
+            </ul>
+          </StepSection>
         )}
 
-        {/* Étape 7: Résultats */}
+        {/* Étape 7 : résultats */}
         {step === 7 && results && (
-          <div className="max-w-6xl mx-auto">
-            <div className="mb-8">
-              <Button onClick={() => setStep(1)} variant="outline" className="mb-4">
-                ← Nouvelle estimation
-              </Button>
-              <h2 className="text-4xl font-bold mb-2">Résultats de l'estimation</h2>
-              <p className="text-gray-600">{formData.address}</p>
-              <p className="text-sm text-gray-500 mt-2">{results.disclaimer}</p>
-            </div>
-
-            {/* Prix Final avec fourchette */}
-            {results.finalPrice && (
-              <Card className="p-8 mb-8 bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-                <div className="text-center">
-                  <h3 className="text-2xl font-semibold mb-6">Estimation de votre bien</h3>
-                  
-                  <div className="grid grid-cols-2 gap-6 mb-8">
-                    <div className="p-8 bg-white/20 rounded-lg backdrop-blur border-2 border-white/30">
-                      <div className="text-sm opacity-80 mb-2">Prix Estimé</div>
-                      <div className="text-sm opacity-70 mb-3">(Basé sur DVF - données réelles)</div>
-                      <div className="text-4xl font-bold">{results.finalPrice.low.toLocaleString()} €</div>
-                    </div>
-                    
-                    <div className="p-8 bg-white/15 rounded-lg backdrop-blur">
-                      <div className="text-sm opacity-80 mb-2">Prix Conseillé de Mise en Vente</div>
-                      <div className="text-sm opacity-70 mb-3">(Optimisé marché actuel)</div>
-                      <div className="text-4xl font-bold">{results.finalPrice.mid.toLocaleString()} €</div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-center gap-4 text-sm mb-4">
-                    <span className="opacity-80">Indice de confiance:</span>
-                    <span className="text-2xl font-bold">{results.finalPrice.confidence}/100</span>
-                  </div>
-                  
-                  <div className="text-xs opacity-70">
-                    Fourchette totale : {results.finalPrice.low.toLocaleString()} € - {results.finalPrice.high.toLocaleString()} €
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Ajustements détaillés */}
-            {results.adjustments && results.adjustments.adjustments && results.adjustments.adjustments.length > 0 && (
-              <Card className="p-6 mb-8">
-                <h3 className="text-2xl font-bold mb-4">Ajustements appliqués</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded font-semibold">
-                    <span>Base DVF (données réelles)</span>
-                    <span>{results.adjustments.basePricePerM2.toLocaleString()} €/m²</span>
-                  </div>
-                  
-                  {results.adjustments.adjustments.map((adj, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 border-b">
-                      <div>
-                        <div className="font-medium">{adj.factor}</div>
-                        <div className="text-sm text-gray-600">{adj.description}</div>
-                      </div>
-                      <div className={`font-bold ${
-                        adj.impact > 0 ? 'text-green-600' : adj.impact < 0 ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {adj.impact > 0 ? '+' : ''}{adj.impact.toFixed(1)}%
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <div className="flex justify-between items-center p-4 bg-black text-white rounded-lg font-bold text-lg mt-4">
-                    <span>Prix ajusté final</span>
-                    <span>{results.adjustments.adjustedPricePerM2.toLocaleString()} €/m²</span>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* DVF Statistics */}
-            {results.dvf && results.dvf.stats && (
-              <Card className="p-6 mb-8">
-                <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                  Ventes Réelles DVF
-                </h3>
-                
-                {results.dvf.warning && (
-                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                    ⚠️ {results.dvf.warning}
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600">Comparables</div>
-                    <div className="text-2xl font-bold">{results.dvf.count}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600">Rayon</div>
-                    <div className="text-2xl font-bold">{results.dvf.radius}m</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600">Période</div>
-                    <div className="text-2xl font-bold">{results.dvf.months} mois</div>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Map */}
-            {(results.dvf?.comparables?.length > 0 || results.market?.listings?.length > 0) && (
-              <Card className="p-6 mb-8">
-                <h3 className="text-2xl font-bold mb-4">Carte des comparables</h3>
-                <EstimationMap
-                  center={[formData.lat, formData.lng]}
-                  dvfSales={results.dvf.comparables || []}
-                  marketListings={results.market?.listings || []}
-                />
-              </Card>
-            )}
-
-            {/* Call to Action - Découvrir AlterEgo */}
-            <Card className="p-8 mb-8 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
-              <div className="text-center">
-                <h3 className="text-3xl font-bold mb-4">Besoin d'un accompagnement personnalisé ?</h3>
-                <p className="text-lg text-gray-700 mb-6 max-w-2xl mx-auto">
-                  Découvrez nos services d'expertise immobilière et bénéficiez de l'accompagnement d'un professionnel pour votre projet.
-                </p>
-                <Button
-                  onClick={() => window.open('https://alteregopatrimoine.com', '_blank')}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-12 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-                >
-                  Découvrir le site AlterEgo
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
-            </Card>
-
-            {/* Bouton nouvelle estimation */}
-            <div className="text-center">
-              <Button
-                onClick={() => {
-                  setStep(1);
-                  setFormData({
-                    address: '',
-                    lat: null,
-                    lng: null,
-                    type: '',
-                    surface: '',
-                    totalSurface: '',
-                    rooms: '',
-                    bathrooms: '',
-                    floors: '',
-                    floor: '',
-                    hasBasement: false,
-                    basementSurface: '',
-                    hasBalconyTerrace: false,
-                    balconyTerraceSurface: '',
-                    hasOutdoorParking: false,
-                    outdoorParkingCount: '',
-                    hasIndoorParking: false,
-                    indoorParkingCount: '',
-                    hasPool: false,
-                    view: '',
-                    yearBuilt: '',
-                    dpe: '',
-                    standing: 3
-                  });
-                  setResults(null);
-                  setLeadForm({ name: '', email: '', phone: '', consent: false });
-                }}
-                variant="outline"
-                className="px-8 py-3"
-              >
-                Faire une nouvelle estimation
-              </Button>
-            </div>
-          </div>
+          <Results results={results} formData={formData} onReset={resetEstimation} />
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t mt-12 py-8">
-        <div className="container mx-auto px-4 text-center text-gray-600">
-          <p>© 2025 AlterEgo. Tous droits réservés.</p>
-          <p className="text-xs mt-2">Estimations basées sur DVF (open data) — valeurs indicatives, non contractuelles.</p>
+      {!embedded && (
+        <footer className="bg-ae-ink text-ae-paper">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row gap-6 sm:items-center sm:justify-between">
+            <img src="/brand/logo-alterego-blanc.png" alt="AlterEgo" className="h-10 w-auto self-start" />
+            <div className="text-sm text-ae-paper/70 sm:text-right space-y-1">
+              <p>© {new Date().getFullYear()} AlterEgo Patrimoine. Tous droits réservés.</p>
+              <p>Estimations basées sur DVF (open data) — valeurs indicatives, non contractuelles.</p>
+            </div>
+          </div>
+        </footer>
+      )}
+    </div>
+  );
+}
+
+function StepHeader({ step, onBack, disabled }) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 mb-8">
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={onBack} disabled={disabled}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-ae-muted hover:text-ae-ink disabled:opacity-40">
+          <ArrowLeft className="w-4 h-4" /> Retour
+        </button>
+        <span className="ae-eyebrow">Étape {step} sur {TOTAL_STEPS}</span>
+      </div>
+      <div className="h-1 rounded-full bg-ae-line overflow-hidden" role="progressbar"
+        aria-valuemin={1} aria-valuemax={TOTAL_STEPS} aria-valuenow={step}>
+        <div className="h-full bg-ae-brique transition-all duration-500" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StepSection({ title, subtitle, children }) {
+  return (
+    <section className="mx-auto max-w-3xl px-4 sm:px-6">
+      <h2 className="ae-h2 mb-3">{title}</h2>
+      {subtitle && <p className="text-ae-muted mb-8">{subtitle}</p>}
+      {!subtitle && <div className="mb-8" />}
+      {children}
+    </section>
+  );
+}
+
+function Field({ id, label, hint, children }) {
+  return (
+    <div>
+      <label htmlFor={id} className="ae-label">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-ae-muted mt-1.5">{hint}</p>}
+    </div>
+  );
+}
+
+function ExtraOption({ label, checked, onToggle, value, onValue, unit }) {
+  return (
+    <div className={`ae-choice p-4 ${checked ? 'is-selected' : ''}`}>
+      <label className="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" className="ae-checkbox" checked={checked} onChange={(e) => onToggle(e.target.checked)} />
+        <span className="font-semibold">{label}</span>
+      </label>
+      {checked && onValue && (
+        <div className="mt-3 ml-8 flex items-center gap-3">
+          <input type="number" inputMode="numeric" min="0" aria-label={`${label} (${unit})`}
+            placeholder={unit === 'm²' ? 'Surface' : 'Nombre'}
+            value={value} onChange={(e) => onValue(e.target.value)}
+            className="ae-input w-32 min-h-0 py-2" />
+          <span className="text-ae-muted text-sm">{unit}</span>
         </div>
-      </footer>
+      )}
+    </div>
+  );
+}
+
+function ErrorMessage({ children }) {
+  return (
+    <div role="alert" className="p-3 rounded-xl border border-ae-brique/40 bg-ae-brique/5 text-ae-brique text-sm">
+      {children}
+    </div>
+  );
+}
+
+function Results({ results, formData, onReset }) {
+  const { finalPrice, adjustments, dvf, market } = results;
+  const confidence = finalPrice?.confidence ?? 0;
+  const confidenceLabel = confidence >= 80 ? 'Élevée' : confidence >= 70 ? 'Bonne' : 'Modérée';
+
+  return (
+    <div>
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+        <p className="ae-eyebrow mb-3">Résultat de l'estimation</p>
+        <h1 className="ae-h2 mb-2">{formData.address}</h1>
+        <p className="text-ae-muted">
+          {formData.type === 'maison' ? 'Maison' : 'Appartement'} · {formData.surface} m²
+          {formData.rooms ? ` · ${formData.rooms} pièce${formData.rooms > 1 ? 's' : ''}` : ''}
+        </p>
+      </section>
+
+      {/* Bande sombre : prix */}
+      {finalPrice ? (
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+          <div className="rounded-card bg-ae-ink text-ae-paper p-6 sm:p-12">
+            <div className="grid lg:grid-cols-[1.4fr_1fr] gap-10 items-end">
+              <div>
+                <p className="ae-eyebrow !text-ae-paper/60 mb-4">Valeur estimée</p>
+                <p className="font-display font-extrabold tracking-tight leading-none text-[clamp(2.75rem,7vw,5.5rem)]">
+                  {formatEuros(finalPrice.mid)}
+                </p>
+                <p className="mt-5 text-ae-paper/75 text-lg">
+                  Fourchette : <strong className="text-ae-paper">{formatEuros(finalPrice.low)}</strong> à{' '}
+                  <strong className="text-ae-paper">{formatEuros(finalPrice.high)}</strong>
+                </p>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-6 lg:border-l lg:border-ae-paper/15 lg:pl-10">
+                {adjustments?.adjustedPricePerM2 && (
+                  <div>
+                    <dt className="text-sm text-ae-paper/60 mb-1">Prix au m²</dt>
+                    <dd className="font-display text-2xl">{formatEuros(adjustments.adjustedPricePerM2)}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-sm text-ae-paper/60 mb-1">Fiabilité</dt>
+                  <dd className="font-display text-2xl">{confidenceLabel}</dd>
+                  <div className="mt-2 h-1 rounded-full bg-ae-paper/15 overflow-hidden">
+                    <div className="h-full bg-ae-brique" style={{ width: `${confidence}%` }} />
+                  </div>
+                </div>
+                {dvf?.count > 0 && (
+                  <div className="col-span-2 text-sm text-ae-paper/60">
+                    Calculée sur {dvf.count} vente{dvf.count > 1 ? 's' : ''} dans un rayon de {dvf.radius} m, sur {dvf.months} mois.
+                  </div>
+                )}
+              </dl>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+          <div className="ae-card p-6 sm:p-10">
+            <p className="ae-eyebrow mb-3">Estimation à affiner</p>
+            <h2 className="ae-h3 mb-3">Pas assez de ventes comparables dans ce secteur</h2>
+            <p className="text-ae-muted max-w-2xl">
+              {dvf?.warning || "Nous n'avons pas trouvé suffisamment de ventes récentes similaires pour calculer une valeur fiable."}{' '}
+              Un conseiller AlterEgo vous recontacte pour réaliser une estimation personnalisée.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {dvf?.warning && finalPrice && (
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+          <p className="p-4 rounded-2xl bg-ae-sand text-sm text-ae-muted">{dvf.warning}</p>
+        </div>
+      )}
+
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 grid lg:grid-cols-2 gap-6 mb-8">
+        {/* Détail des ajustements */}
+        {adjustments?.adjustments?.length > 0 && (
+          <section className="ae-card p-6 sm:p-8">
+            <h2 className="ae-h3 mb-6">Comment nous l'avons calculée</h2>
+            <div className="flex justify-between items-baseline pb-4 border-b border-ae-line">
+              <span className="font-semibold">Prix de référence du quartier</span>
+              <span className="font-display text-lg">{formatEuros(adjustments.basePricePerM2)}/m²</span>
+            </div>
+            <ul>
+              {adjustments.adjustments.map((adj, idx) => (
+                <li key={idx} className="flex justify-between items-center gap-4 py-3 border-b border-ae-line">
+                  <div>
+                    <p className="font-medium">{adj.factor}</p>
+                    <p className="text-sm text-ae-muted">{adj.description}</p>
+                  </div>
+                  <span className={`font-semibold tabular-nums ${adj.impact > 0 ? 'text-ae-ink' : adj.impact < 0 ? 'text-ae-brique' : 'text-ae-muted'}`}>
+                    {adj.impact > 0 ? '+' : ''}{adj.impact.toFixed(1)} %
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-between items-baseline pt-4">
+              <span className="font-semibold">Prix retenu pour votre bien</span>
+              <span className="font-display text-lg">{formatEuros(adjustments.adjustedPricePerM2)}/m²</span>
+            </div>
+          </section>
+        )}
+
+        {/* Ventes comparables */}
+        {dvf?.comparables?.length > 0 && (
+          <section className="ae-card p-6 sm:p-8">
+            <h2 className="ae-h3 mb-6">Ventes récentes à proximité</h2>
+            <ul className="divide-y divide-ae-line">
+              {dvf.comparables.slice(0, 6).map(sale => (
+                <li key={sale.id} className="py-3 flex justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{sale.address}</p>
+                    <p className="text-sm text-ae-muted">
+                      {sale.surface} m² · {formatDate(sale.date)} · à {sale.distance} m
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-semibold tabular-nums">{formatEuros(sale.price)}</p>
+                    <p className="text-sm text-ae-muted tabular-nums">{formatEuros(sale.pricePerM2)}/m²</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      {dvf?.comparables?.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+          <div className="ae-card p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
+              <h2 className="ae-h3">Carte des ventes</h2>
+              <div className="flex gap-5 text-sm text-ae-muted">
+                <span className="inline-flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-ae-brique" /> Votre bien</span>
+                <span className="inline-flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-ae-ink" /> Ventes DVF</span>
+              </div>
+            </div>
+            <EstimationMap
+              center={[formData.lat, formData.lng]}
+              radius={dvf.radius}
+              dvfSales={dvf.comparables}
+            />
+          </div>
+        </section>
+      )}
+
+      {market?.listings?.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
+          <div className="ae-card p-6 sm:p-8">
+            <h2 className="ae-h3 mb-4">Biens actuellement en vente</h2>
+            <ul className="divide-y divide-ae-line">
+              {market.listings.slice(0, 6).map(listing => (
+                <li key={listing.url} className="py-3 flex justify-between gap-4">
+                  <a href={listing.url} target="_blank" rel="noopener noreferrer" className="font-medium hover:text-ae-brique truncate">{listing.title}</a>
+                  <span className="tabular-nums shrink-0">{formatEuros(listing.price)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {/* Appel à l'action */}
+      <section className="bg-ae-sand py-12 sm:py-16">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 text-center">
+          <p className="ae-eyebrow mb-4">Aller plus loin</p>
+          <h2 className="ae-h2 mb-5">Affinez cette estimation avec un conseiller AlterEgo</h2>
+          <p className="text-ae-muted text-lg max-w-2xl mx-auto mb-8">
+            Une visite permet de prendre en compte ce que les données ne voient pas :
+            luminosité, prestations, copropriété, potentiel. C'est gratuit et sans engagement.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a href={CONTACT_URL} target="_top" className="ae-btn ae-btn-brique">
+              Prendre rendez-vous <ArrowRight className="w-5 h-5" />
+            </a>
+            <button type="button" onClick={onReset} className="ae-btn ae-btn-outline">
+              Nouvelle estimation
+            </button>
+          </div>
+          <p className="text-xs text-ae-muted mt-8 max-w-2xl mx-auto">{results.disclaimer}</p>
+        </div>
+      </section>
     </div>
   );
 }
