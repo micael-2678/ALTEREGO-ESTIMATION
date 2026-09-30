@@ -23,15 +23,25 @@ const nextConfig = {
     pagesBufferLength: 2,
   },
   async headers() {
+    // L'outil peut être intégré en iframe uniquement par le site AlterEgo
+    // (surchargeable via FRAME_ANCESTORS="https://a.fr https://b.fr").
+    const frameAncestors =
+      process.env.FRAME_ANCESTORS ||
+      "'self' https://alteregopatrimoine.com https://*.alteregopatrimoine.com";
     return [
       {
         source: "/(.*)",
         headers: [
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-          { key: "Content-Security-Policy", value: "frame-ancestors *;" },
-          { key: "Access-Control-Allow-Origin", value: process.env.CORS_ORIGINS || "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "*" },
+          { key: "Content-Security-Policy", value: `frame-ancestors ${frameAncestors};` },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+      {
+        source: "/admin/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none';" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
     ];
