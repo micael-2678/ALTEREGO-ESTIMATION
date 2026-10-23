@@ -57,6 +57,17 @@ médiane, la part d'estimations à ±10 % et le `CALIBRATION_OFFSET` recommandé
    Traefik à jour en v3.6 ou plus récent (image `traefik:v3.6`).
 3. **Réseau** : le service doit être sur le réseau externe `dokploy-network`.
 
+### Middleware Traefik « noindex »
+
+Toutes les réponses de `app.alteregopatrimoine.com` portent l'en-tête
+`X-Robots-Tag: noindex, nofollow` : les moteurs de recherche n'indexent pas l'outil (il est
+intégré au site principal, qui porte le référencement). Le middleware est déclaré par les
+étiquettes de `docker-compose.yml` et ne demande rien sur le serveur.
+
+`traefik/noindex.yml` en est la version « fichier » : déposée dans la configuration dynamique
+de Traefik (Dokploy > Traefik > File System, ou `/etc/dokploy/traefik/dynamic/`), elle
+s'utilise depuis n'importe quel routeur sous le nom `noindex@file`.
+
 Les scripts d'import DVF fonctionnent dans le conteneur :
 `docker exec -it <conteneur> node scripts/ingest-dvf.js 75`.
 
