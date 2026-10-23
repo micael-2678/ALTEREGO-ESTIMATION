@@ -44,6 +44,11 @@ services:
       - traefik.http.routers.alterego-https.entrypoints=websecure
       - traefik.http.routers.alterego-https.tls.certresolver=letsencrypt
       - traefik.http.routers.alterego-https.service=alterego
+      # « noindex » : en-tête X-Robots-Tag sur toutes les réponses (pas d'indexation).
+      # Déclaré ici pour fonctionner sans fichier sur le serveur ; traefik/noindex.yml
+      # en est la version « fichier » (noindex@file) pour les autres applications.
+      - traefik.http.routers.alterego-https.middlewares=noindex
+      - traefik.http.middlewares.noindex.headers.customresponseheaders.X-Robots-Tag=noindex, nofollow
       # HTTP → redirection vers HTTPS. Un routeur avec TLS ne répond jamais en HTTP :
       # l'ancien routeur unique "web,websecure + tls" renvoyait 404 sur http://
       - traefik.http.routers.alterego-http.rule=Host(`app.alteregopatrimoine.com`)

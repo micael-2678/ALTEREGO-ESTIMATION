@@ -1,0 +1,11 @@
+# Middleware Traefik « noindex » (fournisseur fichier) : demande aux moteurs de recherche
+# de ne pas indexer les réponses et de ne pas suivre leurs liens.
+# À déposer dans la configuration dynamique de Traefik sur le serveur Dokploy
+# (/etc/dokploy/traefik/dynamic/noindex.yml, ou Dokploy > Traefik > File System).
+# Il se référence ensuite sous le nom « noindex@file » depuis n'importe quel routeur.
+http:
+  middlewares:
+    noindex:
+      headers:
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow"
