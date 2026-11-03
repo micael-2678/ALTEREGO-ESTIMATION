@@ -275,9 +275,12 @@
   }
 }
 
-/* Leaflet : popups aux couleurs de la charte */
+/* Leaflet : popups aux couleurs de la charte, fond de carte adouci (tuiles OpenStreetMap) */
 .leaflet-container {
   font-family: var(--ae-font-text);
+}
+.leaflet-tile-pane {
+  filter: grayscale(0.45) saturate(0.7) brightness(1.03);
 }
 .leaflet-popup-content-wrapper {
   border-radius: 14px;

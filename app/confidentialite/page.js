@@ -60,7 +60,7 @@ export default function Confidentialite() {
         <li><strong>Brevo</strong> (Sendinblue SAS, France) : envoi du code SMS et gestion des contacts et emails.</li>
         <li>
           <strong>Base Adresse Nationale</strong> (api-adresse.data.gouv.fr) : l'adresse saisie lui est transmise pour
-          l'autocomplétion. <strong>OpenStreetMap / CARTO</strong> : affichage du fond de carte des ventes.
+          l'autocomplétion. <strong>OpenStreetMap</strong> (OpenStreetMap Foundation, Royaume-Uni) : affichage du fond de carte des ventes.
         </li>
         <li>
           <strong>Google Ireland Ltd</strong>, uniquement si vous acceptez les cookies. Des transferts vers les
