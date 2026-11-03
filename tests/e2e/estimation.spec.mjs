@@ -174,9 +174,11 @@ test('parcours location : questions propres au loyer, résultat plafonné et cad
   await page.getByRole('button', { name: 'Non', exact: true }).click();
   await expectNoHorizontalOverflow(page);
   await page.getByRole('button', { name: /Recevoir mon estimation/ }).click();
+  // Attendre l'écran de saisie du code avant de taper (le runner CI est plus lent)
+  await expect(page.getByText('Vérifiez votre téléphone')).toBeVisible();
   await page.keyboard.type('123456');
 
-  await expect(page.getByText('Loyer estimé', { exact: true })).toBeVisible();
+  await expect(page.getByText('Loyer estimé', { exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('1 562 €').first()).toBeVisible();
   await expect(page.getByText(/plafonné par la loi/)).toBeVisible();
   await expect(page.getByText('Encadrement des loyers à Paris')).toBeVisible();
