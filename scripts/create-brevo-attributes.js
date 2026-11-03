@@ -35,6 +35,11 @@ const attributes = [
   { name: 'PRIX_MIN', type: 'float' },
   { name: 'PRIX_MAX', type: 'float' },
   { name: 'CONFIANCE', type: 'float' },
+  { name: 'LOYER_ESTIME', type: 'float' },
+  { name: 'LOYER_MIN', type: 'float' },
+  { name: 'LOYER_MAX', type: 'float' },
+  { name: 'LOYER_CONFIANCE', type: 'float' },
+  { name: 'LOCATION_MEUBLEE', type: 'text' },
   
   // Date
   { name: 'DATE_ESTIMATION', type: 'date' }

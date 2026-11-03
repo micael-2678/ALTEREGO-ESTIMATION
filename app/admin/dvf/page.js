@@ -168,10 +168,11 @@ export default function DVFAdminPage() {
             <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>État du service</h2>
             {[
               ['Base DVF', health.database],
+              ['Références de loyers', health.rent],
               ['Envoi des SMS (Brevo)', health.sms],
               ['Numéros sans vérification', health.bypass],
               ['RGPD', health.rgpd]
-            ].map(([label, item]) => (
+            ].filter(([, item]) => item).map(([label, item]) => (
               <div key={label} style={{ display: 'flex', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6' }}>
                 <span style={{ color: item.ok ? '#16a34a' : '#B94E33', fontWeight: 700 }}>{item.ok ? '✓' : '✗'}</span>
                 <span style={{ fontWeight: 600, minWidth: '14rem' }}>{label}</span>

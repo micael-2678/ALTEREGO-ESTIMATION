@@ -5,7 +5,11 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
-  use: { baseURL: 'http://localhost:3100' },
+  use: {
+    baseURL: 'http://localhost:3100',
+    // Chromium déjà présent sur la machine (PLAYWRIGHT_CHROMIUM_PATH) : évite un téléchargement
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } } : {})
+  },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 } } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },

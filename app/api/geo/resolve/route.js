@@ -23,7 +23,9 @@ export const GET = handler(async (request) => {
     lat: f.geometry.coordinates[1],
     lng: f.geometry.coordinates[0],
     city: f.properties.city,
-    postalCode: f.properties.postcode
+    postalCode: f.properties.postcode,
+    // Code INSEE de la commune (arrondissement à Paris, Lyon, Marseille) : références de loyers
+    insee: f.properties.citycode || null
   }));
   return json(request, { suggestions });
 });

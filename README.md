@@ -2,7 +2,8 @@
 
 Outil d'estimation en ligne d'AlterEgo Patrimoine : l'utilisateur décrit son bien, vérifie
 son téléphone par SMS et obtient une valeur calculée à partir des ventes réelles
-(DVF) autour de l'adresse. Chaque estimation crée un lead dans l'admin et dans Brevo.
+(DVF) autour de l'adresse, ou un loyer s'il souhaite louer (observatoire des loyers, Carte
+des loyers, règles légales). Chaque estimation crée un lead dans l'admin et dans Brevo.
 
 - Tunnel d'estimation : `/` (intégrable en iframe avec `/?embed=1`)
 - Administration des leads : `/admin`
@@ -31,6 +32,18 @@ L'import récupère les 5 dernières années publiées sur data.gouv.fr (`DVF_YE
 choisir), ne garde que les ventes d'un seul logement (les ventes « en bloc » faussent
 le prix au m²) et ne supprime jamais les données d'un département si le
 téléchargement échoue.
+
+## Charger les références de loyers (projet « Louer »)
+
+```bash
+yarn ingest:loyers all        # Carte des loyers (data.gouv.fr) + encadrement des loyers à Paris (opendata.paris.fr)
+yarn ingest:loyers carte      # ou l'un des deux seulement
+yarn ingest:loyers paris
+```
+
+À refaire chaque année (Carte des loyers en décembre, arrêté parisien en juillet). Sans ces
+données, le projet « Louer » répond « pas de référence de loyer » et seule la valeur de vente
+est calculée. Méthode de calcul, sources et limites : `docs/LOYERS.md`.
 
 ## Recalibrer le modèle
 
@@ -103,6 +116,10 @@ l'administration est désactivée.
 | `lib/dvf-enhanced.js` | Recherche adaptative des ventes comparables |
 | `lib/dvf-adjustments.js` | Ajustements (étage, DPE, vue…), confiance et fourchette |
 | `lib/config-adjustments.js` | **Tous les réglages du modèle** (poids, bornes, calibrage) |
+| `lib/rent-estimation.js`, `lib/rent-rules.js` | Estimation de loyer et cadre légal (DPE, gel, zone tendue, encadrement Paris) |
+| `lib/config-rent.js` | **Réglages de l'estimation de loyer** |
+| `lib/rent-ingestion.js` | Import de la Carte des loyers et de l'encadrement parisien |
+| `docs/LOYERS.md` | Méthode d'estimation des loyers, données, limites |
 | `lib/dvf-ingestion.js` | Import des fichiers DVF |
 | `docs/AUDIT_2026.md` | Audit, corrections et pistes d'amélioration |
 | `docs/GUIDE_AJUSTEMENT.md` | Guide de réglage du modèle |

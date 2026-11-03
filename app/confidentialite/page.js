@@ -28,8 +28,8 @@ export default function Confidentialite() {
 
       <h2>Données collectées</h2>
       <ul>
-        <li><strong>Le bien</strong> : adresse, type, surfaces, pièces, étage, équipements, état, DPE.</li>
-        <li><strong>Vos coordonnées</strong> : nom, email, téléphone mobile, projet (vendre ou acheter).</li>
+        <li><strong>Le bien</strong> : adresse, type, surfaces, pièces, étage, équipements, état, DPE et, pour une mise en location, le type de location, l'époque de construction et le dernier loyer appliqué si vous le renseignez.</li>
+        <li><strong>Vos coordonnées</strong> : nom, email, téléphone mobile, projet (vendre, acheter ou louer).</li>
         <li><strong>Vos choix</strong> : consentements donnés, avec leur date et le texte présenté.</li>
         <li><strong>Le résultat</strong> de l'estimation et, ensuite, le suivi de votre demande par nos conseillers.</li>
         <li><strong>Données techniques</strong> : adresse IP, utilisée en mémoire pour limiter les abus, sans être enregistrée.</li>

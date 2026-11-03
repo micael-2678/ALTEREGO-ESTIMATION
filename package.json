@@ -10,6 +10,7 @@
         "start": "node .next/standalone/server.js",
         "test": "node --test tests/*.test.mjs",
         "ingest:dvf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ingest-dvf.js",
+        "ingest:loyers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ingest-loyers.js",
         "test:e2e": "playwright test",
         "postbuild": "cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/",
         "backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/backtest.js",

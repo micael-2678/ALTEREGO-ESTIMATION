@@ -47,12 +47,41 @@ function syntheticSales(count = 1500) {
     const prix_m2 = Math.round((type === 'appartement' ? 10500 : 8000) * Math.pow(0.97, ageYears) * (0.85 + rnd() * 0.3));
     return {
       date_mutation: new Date(now - ageYears * 365.25 * 864e5).toISOString().split('T')[0],
-      voie: 'RUE DE PROVENCE', code_postal: '75009', commune: 'Paris 9e Arrondissement', code_departement: '75',
+      voie: 'RUE DE PROVENCE', code_postal: '75009', commune: 'Paris 9e Arrondissement', code_departement: '75', code_commune: '75109',
       type_local: type, surface_reelle_bati: surface, valeur_fonciere: prix_m2 * surface, prix_m2,
       latitude: LAT + (rnd() - 0.5) * 0.02, longitude: LNG + (rnd() - 0.5) * 0.03,
       nature_mutation: 'Vente', id_mutation: `T-${i}`, imported_at: new Date().toISOString()
     };
   });
+}
+
+// Références de loyers synthétiques : Carte des loyers (Paris 9e, Boulogne) et un quartier parisien
+// de l'encadrement couvrant le point de test
+const PERIODS = ['avant_1946', '1946_1970', '1971_1990', 'apres_1990'];
+function rentIndicators() {
+  const docs = [];
+  for (const [insee, name, base] of [['75109', 'Paris 9e Arrondissement', 36], ['92012', 'Boulogne-Billancourt', 28]]) {
+    for (const [category, delta] of [['appartement_1_2', 4], ['appartement_3_plus', -2], ['appartement', 0], ['maison', -6]]) {
+      docs.push({ insee, name, department: insee.slice(0, 2), category, year: 2025, referenceDate: '2025-09-01', rentPerM2: base + delta,
+        low: base + delta - 2, high: base + delta + 2, predictionLevel: 'commune', observations: { commune: 150, maille: 900 } });
+    }
+  }
+  return docs;
+}
+function parisZone() {
+  const refs = [];
+  for (const rooms of [1, 2, 3, 4]) {
+    PERIODS.forEach((period, i) => {
+      for (const furnished of [false, true]) {
+        const ref = 34 - rooms * 1.5 + i * 0.5 + (furnished ? 3 : 0);
+        refs.push({ rooms, period, furnished, ref, max: Math.round(ref * 120) / 100, min: Math.round(ref * 70) / 100 });
+      }
+    });
+  }
+  return {
+    city: 'paris', year: 2026, quartierId: 33, quartierName: 'Chaussée-d\'Antin', zoneId: 3, refs,
+    geometry: { type: 'Polygon', coordinates: [[[LNG - 0.02, LAT - 0.015], [LNG + 0.02, LAT - 0.015], [LNG + 0.02, LAT + 0.015], [LNG - 0.02, LAT + 0.015], [LNG - 0.02, LAT - 0.015]]] }
+  };
 }
 
 async function insertOtp(code) {
@@ -66,11 +95,14 @@ async function insertOtp(code) {
 before(async () => {
   client = await MongoClient.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017');
   db = client.db(process.env.DB_NAME || 'alterego_test');
-  for (const name of ['dvf_sales', 'leads', 'otp_verifications']) {
+  for (const name of ['dvf_sales', 'leads', 'otp_verifications', 'rent_indicators', 'rent_control_zones']) {
     await db.collection(name).deleteMany({});
   }
   await db.collection('dvf_sales').insertMany(syntheticSales());
   await db.collection('dvf_sales').createIndex({ type_local: 1, latitude: 1, longitude: 1, date_mutation: -1 });
+  await db.collection('rent_indicators').insertMany(rentIndicators());
+  await db.collection('rent_control_zones').insertOne(parisZone());
+  await db.collection('rent_control_zones').createIndex({ geometry: '2dsphere' });
 });
 
 after(async () => {
@@ -120,6 +152,81 @@ test('estimation et comparables', async () => {
   const comps = await api('GET', `/api/dvf/comparables?lat=${LAT}&lng=${LNG}&type=appartement&surface=60`);
   assert.equal(comps.status, 200);
   assert.ok(comps.data.count > 0);
+});
+
+test('estimation de loyer : Paris plafonné, commune via la Carte des loyers, validation', async () => {
+  // Paris : observatoire du quartier + annonces de l'arrondissement, plafond du loyer majoré, dernier loyer connu
+  const paris = await api('POST', '/api/estimate', {
+    body: {
+      lat: LAT, lng: LNG, type: 'appartement', surface: 60, purpose: 'rent',
+      characteristics: { floor: '1-3', hasElevator: true, dpe: 'D', condition: 'renovated' },
+      rent: { rooms: 3, furnished: false, constructionPeriod: '1946_1970', insee: '75109', rentedRecently: true, previousRent: 2500, parking: { indoor: 1 } }
+    }
+  });
+  assert.equal(paris.status, 200);
+  const { rent, finalPrice } = paris.data;
+  assert.equal(rent.available, true);
+  assert.equal(rent.source.kind, 'paris_blend');
+  assert.equal(rent.legal.parisControl.quartier, 'Chaussée-d\'Antin');
+  assert.equal(rent.legal.parisControl.rooms, 3);
+  assert.ok(rent.monthly.exclCharges <= rent.legal.parisControl.maxMonthly);
+  assert.ok(rent.monthly.exclCharges <= 2500);
+  assert.ok(rent.monthly.exclCharges > 1000, `${rent.monthly.exclCharges}`);
+  assert.deepEqual(rent.legal.caps.map(c => c.code).sort(), ['paris_max', 'previous_rent']);
+  assert.equal(rent.monthly.parking, 100);
+  assert.ok(rent.yield.gross > 0 && finalPrice.mid > 0);
+  assert.ok(rent.market.references.some(r => r.code === 'paris_observatory') && rent.market.references.some(r => r.code === 'carte_loyers'));
+  assert.match(paris.data.disclaimer, /Carte des loyers/);
+
+  // Hors Paris, sans vente DVF : loyer d'annonce de la commune, meublé, DPE G interdit
+  const suburb = await api('POST', '/api/estimate', {
+    body: {
+      lat: 48.84, lng: 2.24, type: 'appartement', surface: 30, purpose: 'rent', characteristics: { dpe: 'G' },
+      rent: { rooms: 1, furnished: true, insee: '92012', rentedRecently: false }
+    }
+  });
+  assert.equal(suburb.status, 200);
+  assert.equal(suburb.data.finalPrice, null);
+  assert.equal(suburb.data.rent.available, true);
+  assert.equal(suburb.data.rent.source.kind, 'carte_loyers');
+  assert.equal(suburb.data.rent.legal.rentable, false);
+  assert.equal(suburb.data.rent.yield, null);
+  assert.ok(suburb.data.rent.market.steps.some(s => s.code === 'furnished'));
+  assert.ok(suburb.data.rent.monthly.exclCharges > 500 && suburb.data.rent.monthly.exclCharges < 1300, `${suburb.data.rent.monthly.exclCharges}`);
+
+  // Commune sans référence : estimation de vente seule, loyer indisponible mais réponse propre
+  const unknown = await api('POST', '/api/estimate', {
+    body: { lat: 45.76, lng: 4.84, type: 'maison', surface: 120, purpose: 'rent', rent: { rooms: 5, insee: '69123' } }
+  });
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.data.rent.available, false);
+
+  // Paramètres de location invalides
+  assert.equal((await api('POST', '/api/estimate', { body: { lat: LAT, lng: LNG, type: 'appartement', surface: 60, purpose: 'rent', rent: { rooms: 0 } } })).status, 400);
+  assert.equal((await api('POST', '/api/estimate', { body: { lat: LAT, lng: LNG, type: 'appartement', surface: 60, purpose: 'rent' } })).status, 400);
+});
+
+test('lead « Louer » : champs de location conservés, estimation de loyer rattachée', async () => {
+  const created = await api('POST', '/api/leads', {
+    body: {
+      name: 'Marie Bailleur', email: 'marie@example.fr', phone: '0698793430', estimationReason: 'Louer', consent: true,
+      property: { address: '2 Rue des Italiens', type: 'appartement', surface: '60', rooms: '3', insee: '75109', furnished: true, rentedRecently: false, previousRent: '', bogus: 1 }
+    }
+  });
+  assert.equal(created.status, 200);
+  const estimate = await api('POST', '/api/estimate', {
+    body: { leadId: created.data.leadId, lat: LAT, lng: LNG, type: 'appartement', surface: 60, purpose: 'rent', rent: { rooms: 3, furnished: true, insee: '75109' } }
+  });
+  assert.equal(estimate.status, 200);
+  const lead = await db.collection('leads').findOne({ id: created.data.leadId });
+  assert.equal(lead.property.furnished, true);
+  assert.equal(lead.property.insee, '75109');
+  assert.equal(lead.property.bogus, undefined);
+  assert.equal(lead.estimation.rent.available, true);
+  assert.equal(lead.estimation.rent.furnished, true);
+  assert.equal(lead.estimation.rent.legal.parisControl.furnished, true);
+  await db.collection('leads').deleteOne({ id: created.data.leadId });
+  assert.equal((await api('POST', '/api/leads', { body: { name: 'X', email: 'x@example.fr', phone: '0698793430', estimationReason: 'Squatter', consent: true } })).status, 400);
 });
 
 test('lead : vérification SMS obligatoire, un seul lead, champs injectés ignorés', async () => {
@@ -226,6 +333,9 @@ test('admin : connexion par cookie httpOnly et gestion des leads', async () => {
   assert.match(health.data.sms.message, /BREVO_API_KEY absente/);
   assert.match(health.data.sms.lastFailure.reason, /BREVO_API_KEY absente/);
   assert.equal(health.data.bypass.count, 1);
+  assert.equal(health.data.rent.ok, true);
+  assert.equal(health.data.rent.parisQuartiers, 1);
+  assert.match(health.data.rent.message, /Carte des loyers 2025.*Paris : 1 quartiers \(arrêté 2026\)/);
 
   assert.equal((await api('DELETE', `/api/admin/leads/delete?leadId=${lead.id}`, { cookie: adminCookie })).status, 200);
   assert.equal(await db.collection('leads').countDocuments(), 0);
