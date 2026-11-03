@@ -22,6 +22,12 @@ const centerIcon = pin('#B94E33', 42);
 const formatEuros = (value) =>
   `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(value)} €`;
 
+// Fond de carte : OpenStreetMap par défaut (sans clé API). Un autre fournisseur (CARTO,
+// MapTiler, IGN…) se configure par NEXT_PUBLIC_MAP_TILES_URL / NEXT_PUBLIC_MAP_ATTRIBUTION.
+const TILES_URL = process.env.NEXT_PUBLIC_MAP_TILES_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILES_ATTRIBUTION = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ||
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
 export default function EstimationMap({ center, radius = 500, dvfSales = [] }) {
   return (
     <div className="h-80 sm:h-[28rem] w-full rounded-2xl overflow-hidden border border-ae-line isolate">
@@ -31,10 +37,7 @@ export default function EstimationMap({ center, radius = 500, dvfSales = [] }) {
         scrollWheelZoom={false}
         style={{ height: '100%', width: '100%' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        />
+        <TileLayer attribution={TILES_ATTRIBUTION} url={TILES_URL} maxZoom={19} />
 
         {/* Rayon de recherche réellement utilisé */}
         <Circle
