@@ -74,7 +74,7 @@ async function mockApi(page, calls) {
     r.fulfill({ json: body.purpose === 'rent' ? rentEstimate : estimate });
   });
   // Tuiles de carte et tags externes inutiles au test
-  await page.route(/(basemaps\.cartocdn\.com|googletagmanager\.com)/, r => r.abort());
+  await page.route(/(tile\.openstreetmap\.org|basemaps\.cartocdn\.com|googletagmanager\.com)/, r => r.abort());
 }
 
 // Sur mobile, un contenu trop large fait dézoomer le navigateur (innerWidth grandit) :
