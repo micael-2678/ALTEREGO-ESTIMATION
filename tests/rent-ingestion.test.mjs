@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import {
   normalizeKey, toNumber, normalizeInsee, detectDelimiter, categoryFromTitle, parseCarteRow, parseCarteCsv,
-  normalizePeriod, parseParisFeatures, decodeCsv
+  normalizePeriod, parseParisFeatures, decodeCsv, findYearField, parisExportUrls
 } from '../lib/rent-ingestion.js';
 
 test('en-têtes et valeurs tolérants (casse, ponctuation, virgule décimale, zéro initial)', () => {
@@ -119,4 +119,19 @@ test('encadrement Paris : époques, meublé, regroupement par quartier, dernièr
 
   // Année imposée
   assert.equal(parseParisFeatures({ features }, { year: 2025 }).zones[0].refs.find(r => r.rooms === 1 && !r.furnished).ref, 31);
+});
+
+test('encadrement Paris : champ année retrouvé quel que soit son nom, export typé avec replis', () => {
+  assert.equal(findYearField([{ name: 'ref', type: 'double' }, { name: 'annee', type: 'int' }]).name, 'annee');
+  assert.equal(findYearField([{ name: 'Année', type: 'text' }]).name, 'Année');
+  assert.equal(findYearField([{ name: 'millesime_arrete', type: 'int' }]).name, 'millesime_arrete');
+  assert.equal(findYearField([{ name: 'ref' }]), null);
+
+  const numeric = parisExportUrls(2026, { name: 'annee', type: 'int' });
+  assert.match(decodeURIComponent(numeric[0]), /where=annee=2026$/);
+  assert.match(decodeURIComponent(numeric[1]), /where=annee="2026"$/);
+  assert.match(decodeURIComponent(numeric[2]), /refine=annee:2026$/);
+  const text = parisExportUrls(2026, { name: 'annee', type: 'text' });
+  assert.match(decodeURIComponent(text[0]), /where=annee="2026"$/);
+  assert.match(decodeURIComponent(text[1]), /where=annee=2026$/);
 });
