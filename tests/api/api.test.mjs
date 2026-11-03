@@ -290,6 +290,8 @@ test('admin : accès refusé sans session', async () => {
   assert.equal((await api('DELETE', '/api/admin/leads/delete?leadId=x')).status, 401);
   assert.equal((await api('GET', '/api/admin/dvf/status')).status, 401);
   assert.equal((await api('GET', '/api/admin/dvf?action=stats')).status, 401);
+  assert.equal((await api('GET', '/api/admin/rent')).status, 401);
+  assert.equal((await api('POST', '/api/admin/rent')).status, 401);
   assert.equal((await api('GET', '/api/leads', { headers: { authorization: 'Bearer forged' } })).status, 401);
 });
 
@@ -325,6 +327,10 @@ test('admin : connexion par cookie httpOnly et gestion des leads', async () => {
   const status = await api('GET', '/api/admin/dvf/status', { cookie: adminCookie });
   assert.equal(status.status, 200);
   assert.equal(status.data.total, 1500);
+
+  const rentImport = await api('GET', '/api/admin/rent', { cookie: adminCookie });
+  assert.equal(rentImport.status, 200);
+  assert.equal(rentImport.data.isRunning, false);
 
   const health = await api('GET', '/api/admin/health', { cookie: adminCookie });
   assert.equal(health.status, 200);

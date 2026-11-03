@@ -41,6 +41,9 @@ yarn ingest:loyers carte      # ou l'un des deux seulement
 yarn ingest:loyers paris
 ```
 
+Sans accès au serveur : `/admin/dvf` → **Charger les références de loyers** (et **Charger les
+ventes DVF Île-de-France**), progression affichée sur la page.
+
 À refaire chaque année (Carte des loyers en décembre, arrêté parisien en juillet). Sans ces
 données, le projet « Louer » répond « pas de référence de loyer » et seule la valeur de vente
 est calculée. Méthode de calcul, sources et limites : `docs/LOYERS.md`.
