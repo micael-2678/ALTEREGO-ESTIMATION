@@ -3,17 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Home, Building2, MapPin, ArrowRight, ArrowLeft, Loader2, RotateCcw, Check, ShieldCheck, Clock, LineChart } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp';
-import dynamic from 'next/dynamic';
 import SiteFooter from '@/components/SiteFooter';
+import RentResults from '@/components/RentResults';
+import { SITE_URL, formatEuros, formatDate, SalesMapCard, CallToAction } from '@/components/results-shared';
 import { LEGAL, CONSENT_TEXTS } from '@/lib/legal';
 
-const EstimationMap = dynamic(() => import('@/components/EstimationMap'), {
-  ssr: false,
-  loading: () => <div className="h-96 w-full rounded-card bg-ae-sand animate-pulse" />
-});
-
-const SITE_URL = process.env.NEXT_PUBLIC_MAIN_SITE_URL || 'https://alteregopatrimoine.com';
-const CONTACT_URL = process.env.NEXT_PUBLIC_CONTACT_URL || SITE_URL;
 const TOTAL_STEPS = 6;
 
 const INITIAL_FORM = {
@@ -21,6 +15,7 @@ const INITIAL_FORM = {
   address: '',
   lat: null,
   lng: null,
+  insee: null,
   // Étape 2 : type
   type: '',
   // Étape 3 : caractéristiques principales
@@ -45,7 +40,12 @@ const INITIAL_FORM = {
   // Étape 5 : état
   yearBuilt: '',
   dpe: '',
-  standing: 3
+  standing: 3,
+  // Projet de location (étape 6)
+  furnished: null,
+  constructionPeriod: '',
+  rentedRecently: null,
+  previousRent: ''
 };
 
 const INITIAL_LEAD = {
@@ -71,19 +71,16 @@ const VIEW_OPTIONS = [
   { value: 'exceptionnelle', label: 'Exceptionnelle' }
 ];
 
+const PERIOD_OPTIONS = [
+  { value: 'avant_1946', label: 'Avant 1946' },
+  { value: '1946_1970', label: '1946-1970' },
+  { value: '1971_1990', label: '1971-1990' },
+  { value: 'apres_1990', label: 'Après 1990' }
+];
+
 // Couleurs de l'étiquette énergie réglementaire (information fonctionnelle)
 const DPE_COLORS = {
   A: '#009C6D', B: '#52B153', C: '#A5CC74', D: '#F4E70F', E: '#F2A93B', F: '#EB6B25', G: '#D7221F'
-};
-
-const formatEuros = (value) =>
-  `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(value)} €`;
-
-const formatDate = (value) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
 };
 
 export default function App() {
@@ -178,7 +175,7 @@ export default function App() {
   };
 
   const selectAddress = (suggestion) => {
-    updateForm({ address: suggestion.address, lat: suggestion.lat, lng: suggestion.lng });
+    updateForm({ address: suggestion.address, lat: suggestion.lat, lng: suggestion.lng, insee: suggestion.insee || null });
     setShowSuggestions(false);
     setAddressSuggestions([]);
   };
@@ -345,6 +342,7 @@ export default function App() {
         return;
       }
 
+      const isRent = leadForm.estimationReason === 'Louer';
       const estimate = await postJson('/api/estimate', {
         leadId: lead.data.leadId,
         address: formData.address,
@@ -352,7 +350,23 @@ export default function App() {
         lng: formData.lng,
         type: formData.type,
         surface: parseFloat(formData.surface),
-        characteristics: mapToCharacteristics()
+        characteristics: mapToCharacteristics(),
+        ...(isRent ? {
+          purpose: 'rent',
+          rent: {
+            rooms: parseInt(formData.rooms, 10),
+            furnished: formData.furnished === true,
+            constructionPeriod: formData.constructionPeriod || null,
+            yearBuilt: formData.yearBuilt || null,
+            rentedRecently: formData.rentedRecently === true,
+            previousRent: formData.rentedRecently === true && formData.previousRent ? parseFloat(formData.previousRent) : null,
+            insee: formData.insee || null,
+            parking: {
+              outdoor: formData.hasOutdoorParking ? parseInt(formData.outdoorParkingCount, 10) || 1 : 0,
+              indoor: formData.hasIndoorParking ? parseInt(formData.indoorParkingCount, 10) || 1 : 0
+            }
+          }
+        } : {})
       });
 
       if (!estimate.res.ok) {
@@ -388,8 +402,9 @@ export default function App() {
   const step3Valid = formData.surface && parseFloat(formData.surface) > 0 && formData.rooms &&
     (formData.type !== 'appartement' || (formData.floor !== '' && formData.floors !== '' && formData.hasElevator !== null));
 
+  const rentValid = leadForm.estimationReason !== 'Louer' || (formData.furnished !== null && formData.rentedRecently !== null);
   const leadValid = leadForm.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadForm.email) &&
-    leadForm.phone && leadForm.estimationReason && leadForm.consent;
+    leadForm.phone && leadForm.estimationReason && rentValid && leadForm.consent;
 
   return (
     <div ref={rootRef} className={`bg-ae-paper text-ae-ink ${embedded ? '' : 'min-h-screen flex flex-col'}`}>
@@ -418,8 +433,8 @@ export default function App() {
               <p className="ae-eyebrow mb-5">Estimation immobilière gratuite</p>
               <h1 className="ae-h1 mb-6">Combien vaut votre bien&nbsp;?</h1>
               <p className="text-lg text-ae-muted max-w-2xl mx-auto">
-                Une première valeur en 3 minutes, calculée à partir des ventes réelles
-                enregistrées autour de chez vous. Un conseiller AlterEgo l'affine ensuite avec vous.
+                Valeur de vente ou loyer : une première estimation en 3 minutes, calculée à partir des
+                ventes réelles et des loyers observés autour de chez vous. Un conseiller AlterEgo l'affine ensuite avec vous.
               </p>
             </div>
 
@@ -438,7 +453,7 @@ export default function App() {
                   placeholder="Ex. 2 rue des Italiens, 75009 Paris"
                   value={formData.address}
                   onChange={(e) => {
-                    updateForm({ address: e.target.value, lat: null, lng: null });
+                    updateForm({ address: e.target.value, lat: null, lng: null, insee: null });
                     searchAddress(e.target.value);
                   }}
                   onKeyDown={onAddressKeyDown}
@@ -485,7 +500,7 @@ export default function App() {
 
             <ul className="grid sm:grid-cols-3 gap-4 sm:gap-6 mt-10">
               {[
-                { icon: LineChart, title: 'Ventes réelles', text: 'Données publiques DVF des notaires, pas des prix affichés.' },
+                { icon: LineChart, title: 'Données réelles', text: 'Ventes DVF des notaires et observatoires des loyers, pas des prix affichés.' },
                 { icon: Clock, title: '3 minutes', text: 'Quelques questions simples sur votre bien.' },
                 { icon: ShieldCheck, title: 'Sans engagement', text: 'Gratuit, et vos données ne sont jamais revendues.' }
               ].map(({ icon: Icon, title, text }) => (
@@ -735,10 +750,11 @@ export default function App() {
 
                   <fieldset>
                     <legend className="ae-label">Votre projet *</legend>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid sm:grid-cols-3 gap-3">
                       {[
                         { value: 'Vendre', label: 'Vendre', text: 'Je souhaite vendre ce bien' },
-                        { value: 'Acheter', label: 'Acheter', text: "J'envisage d'acheter ce bien" }
+                        { value: 'Acheter', label: 'Acheter', text: "J'envisage d'acheter ce bien" },
+                        { value: 'Louer', label: 'Louer', text: 'Je souhaite mettre ce bien en location' }
                       ].map(opt => (
                         <button key={opt.value} type="button" aria-pressed={leadForm.estimationReason === opt.value}
                           onClick={() => updateLead({ estimationReason: opt.value })}
@@ -749,6 +765,59 @@ export default function App() {
                       ))}
                     </div>
                   </fieldset>
+
+                  {leadForm.estimationReason === 'Louer' && (
+                    <div className="space-y-5 rounded-2xl border border-ae-line p-4 sm:p-5">
+                      <fieldset>
+                        <legend className="ae-label">Type de location *</legend>
+                        <div className="grid grid-cols-2 gap-3 max-w-sm">
+                          {[{ value: false, label: 'Vide' }, { value: true, label: 'Meublée' }].map(opt => (
+                            <button key={opt.label} type="button" aria-pressed={formData.furnished === opt.value}
+                              onClick={() => updateForm({ furnished: opt.value })}
+                              className="ae-choice py-3 font-semibold">
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
+
+                      {!formData.yearBuilt && (
+                        <fieldset>
+                          <legend className="ae-label">Époque de construction</legend>
+                          <p className="text-sm text-ae-muted mb-3">À Paris, elle détermine le loyer de référence de l'encadrement.</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {PERIOD_OPTIONS.map(opt => (
+                              <button key={opt.value} type="button" aria-pressed={formData.constructionPeriod === opt.value}
+                                onClick={() => updateForm({ constructionPeriod: formData.constructionPeriod === opt.value ? '' : opt.value })}
+                                className="ae-choice py-3 px-2 text-sm sm:text-base font-semibold">
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </fieldset>
+                      )}
+
+                      <fieldset>
+                        <legend className="ae-label">Le logement a-t-il été loué au cours des 18 derniers mois ? *</legend>
+                        <div className="grid grid-cols-2 gap-3 max-w-sm">
+                          {[{ value: true, label: 'Oui, il était loué' }, { value: false, label: 'Non' }].map(opt => (
+                            <button key={opt.label} type="button" aria-pressed={formData.rentedRecently === opt.value}
+                              onClick={() => updateForm({ rentedRecently: opt.value, previousRent: opt.value ? formData.previousRent : '' })}
+                              className="ae-choice py-3 px-2 font-semibold">
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
+
+                      {formData.rentedRecently === true && (
+                        <Field id="previousRent" label="Dernier loyer mensuel, hors charges (€)" hint="En zone tendue, il plafonne le loyer du prochain locataire.">
+                          <input id="previousRent" type="number" inputMode="numeric" min="0" placeholder="1200" className="ae-input"
+                            value={formData.previousRent} onChange={(e) => updateForm({ previousRent: e.target.value })} />
+                        </Field>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     <label htmlFor="consent" className="flex items-start gap-3 p-4 rounded-2xl bg-ae-sand cursor-pointer">
@@ -879,8 +948,9 @@ export default function App() {
         )}
 
         {/* Étape 7 : résultats */}
-        {step === 7 && results && (
-          <Results results={results} formData={formData} onReset={resetEstimation} />
+        {step === 7 && results && (results.rent
+          ? <RentResults results={results} formData={formData} onReset={resetEstimation} />
+          : <Results results={results} formData={formData} onReset={resetEstimation} />
         )}
       </main>
 
@@ -1112,44 +1182,10 @@ function Results({ results, formData, onReset }) {
       </div>
 
       {dvf?.comparables?.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 sm:px-6 mb-8">
-          <div className="ae-card p-4 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
-              <h2 className="ae-h3">Carte des ventes</h2>
-              <div className="flex gap-5 text-sm text-ae-muted">
-                <span className="inline-flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-ae-brique" /> Votre bien</span>
-                <span className="inline-flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-ae-ink" /> Ventes DVF</span>
-              </div>
-            </div>
-            <EstimationMap
-              center={[formData.lat, formData.lng]}
-              radius={dvf.radius}
-              dvfSales={dvf.comparables}
-            />
-          </div>
-        </section>
+        <SalesMapCard center={[formData.lat, formData.lng]} radius={dvf.radius} sales={dvf.comparables} />
       )}
 
-      {/* Appel à l'action */}
-      <section className="bg-ae-sand py-12 sm:py-16">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 text-center">
-          <p className="ae-eyebrow mb-4">Aller plus loin</p>
-          <h2 className="ae-h2 mb-5">Affinez cette estimation avec un conseiller AlterEgo</h2>
-          <p className="text-ae-muted text-lg max-w-2xl mx-auto mb-8">
-            Une visite permet de prendre en compte ce que les données ne voient pas :
-            luminosité, prestations, copropriété, potentiel. C'est gratuit et sans engagement.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href={CONTACT_URL} target="_top" className="ae-btn ae-btn-brique">
-              Prendre rendez-vous <ArrowRight className="w-5 h-5" />
-            </a>
-            <button type="button" onClick={onReset} className="ae-btn ae-btn-outline">
-              Nouvelle estimation
-            </button>
-          </div>
-          <p className="text-xs text-ae-muted mt-8 max-w-2xl mx-auto">{results.disclaimer}</p>
-        </div>
-      </section>
+      <CallToAction onReset={onReset} disclaimer={results.disclaimer} />
     </div>
   );
 }

@@ -209,7 +209,7 @@ export default function AdminPage() {
   const exportToCSV = () => {
     const headers = [
       'Date', 'Heure', 'Nom', 'Email', 'Téléphone', 'Raison', 'Adresse', 'Type', 'Surface (m²)',
-      'Prix bas (€)', 'Prix estimé (€)', 'Confiance (%)', 'Statut', 'Commentaires'
+      'Prix bas (€)', 'Prix estimé (€)', 'Confiance (%)', 'Loyer estimé (€/mois)', 'Statut', 'Commentaires'
     ];
     
     const rows = filteredLeads.map(lead => [
@@ -225,6 +225,7 @@ export default function AdminPage() {
       lead.estimation?.finalPrice?.low || '',
       lead.estimation?.finalPrice?.mid || '',
       lead.estimation?.finalPrice?.confidence || '',
+      lead.estimation?.rent?.monthly?.exclCharges || '',
       lead.status || '',
       lead.comments?.length || 0
     ]);
@@ -432,6 +433,7 @@ export default function AdminPage() {
                 <SelectItem value="all">Toutes raisons</SelectItem>
                 <SelectItem value="Acheter">🏠 Acheter</SelectItem>
                 <SelectItem value="Vendre">💰 Vendre</SelectItem>
+                <SelectItem value="Louer">🔑 Louer</SelectItem>
               </SelectContent>
             </Select>
             
@@ -502,11 +504,13 @@ export default function AdminPage() {
                 {lead.estimationReason && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      lead.estimationReason === 'Vendre' 
-                        ? 'bg-green-100 text-green-800 border border-green-200' 
-                        : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      lead.estimationReason === 'Vendre'
+                        ? 'bg-green-100 text-green-800 border border-green-200'
+                        : lead.estimationReason === 'Louer'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
                     }`}>
-                      {lead.estimationReason === 'Vendre' ? '💰 Vendre' : '🏠 Acheter'}
+                      {lead.estimationReason === 'Vendre' ? '💰 Vendre' : lead.estimationReason === 'Louer' ? '🔑 Louer' : '🏠 Acheter'}
                     </span>
                   </div>
                 )}
@@ -534,6 +538,12 @@ export default function AdminPage() {
                           {lead.estimation.finalPrice.confidence}%
                         </Badge>
                       </div>
+                    </div>
+                  )}
+                  {lead.estimation?.rent?.available && (
+                    <div className="flex justify-between text-sm mt-1">
+                      <span className="text-gray-600">Loyer estimé:</span>
+                      <span className="font-bold">{lead.estimation.rent.monthly.exclCharges.toLocaleString('fr-FR')} €/mois{lead.estimation.rent.furnished ? ' (meublé)' : ''}</span>
                     </div>
                   )}
                 </div>
@@ -650,6 +660,35 @@ export default function AdminPage() {
                         <div className="text-2xl font-bold">{selectedLead.estimation.finalPrice.confidence}%</div>
                       </div>
                     </div>
+                  </Card>
+                )}
+
+                {/* Loyer estimé (projet « Louer ») */}
+                {selectedLead.estimation?.rent?.available && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold mb-4 text-xl">Loyer estimé {selectedLead.estimation.rent.furnished ? '(meublé)' : '(vide)'}</h3>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Hors charges</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.rent.monthly.exclCharges.toLocaleString('fr-FR')} €/mois</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Fourchette</div>
+                        <div className="text-lg font-bold">{selectedLead.estimation.rent.monthly.low.toLocaleString('fr-FR')} – {selectedLead.estimation.rent.monthly.high.toLocaleString('fr-FR')} €</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Confiance</div>
+                        <div className="text-2xl font-bold">{selectedLead.estimation.rent.confidence}%</div>
+                      </div>
+                    </div>
+                    {selectedLead.estimation.rent.legal?.applied && (
+                      <p className="text-sm text-gray-600 mt-3">
+                        Loyer de marché {selectedLead.estimation.rent.market.monthly.toLocaleString('fr-FR')} €, plafonné : {selectedLead.estimation.rent.legal.applied.label}.
+                      </p>
+                    )}
+                    {selectedLead.estimation.rent.legal?.rentable === false && (
+                      <p className="text-sm text-ae-brique mt-3">Location interdite (DPE G).</p>
+                    )}
                   </Card>
                 )}
 

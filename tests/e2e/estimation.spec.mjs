@@ -26,17 +26,52 @@ const estimate = {
   disclaimer: 'Valeurs indicatives, non contractuelles.'
 };
 
+// Estimation de loyer (projet « Louer ») : Paris, plafonnée par l'encadrement
+const rentEstimate = {
+  ...estimate,
+  rent: {
+    available: true,
+    monthly: { exclCharges: 1562, inclCharges: 1725, low: 1500, high: 1562, charges: 163, parking: 0, perM2ExclCharges: 24.03 },
+    market: {
+      monthly: 1690, perM2ExclCharges: 26, totalAdjustmentPercent: 6.5, district: null,
+      references: [
+        { code: 'paris_observatory', label: 'Observatoire des loyers — quartier Chaussée-d\'Antin (arrêté 2026)', detail: '3 pièces, 1946-1970, non meublé : loyer de référence', perM2: 20.03, unit: '€/m² hors charges' },
+        { code: 'carte_loyers', label: 'Loyers d\'annonce — Paris 9e Arrondissement (Carte des loyers 2025)', detail: 'appartements 3 pièces et plus, logement vide de 72 m², 150 annonces observées', perM2: 34, unit: '€/m² charges comprises' }
+      ],
+      steps: [{ code: 'base', label: 'Loyer de référence du quartier', description: 'Observatoire des loyers et loyers d\'annonce', perM2: 24.4, unit: '€/m² hors charges' }],
+      adjustments: [{ factor: 'État intérieur', description: 'Rénové récent', impact: 10 }, { factor: 'DPE', description: 'DPE F', impact: -8 }]
+    },
+    legal: {
+      rentable: true,
+      notices: [
+        { code: 'paris_control', level: 'info', title: 'Encadrement des loyers à Paris', text: 'Arrêté préfectoral 2026, zone 3, quartier Chaussée-d\'Antin. Le loyer hors charges ne peut pas dépasser 1 562 € par mois.' },
+        { code: 'dpe_freeze', level: 'warning', title: 'Loyer gelé (DPE F ou G)', text: 'Depuis le 24 août 2022, le loyer d\'un logement classé F ou G ne peut plus être augmenté.' }
+      ],
+      caps: [{ code: 'paris_max', label: 'Plafond de l\'encadrement (loyer de référence majoré)', monthly: 1562, perM2: 24.03 }],
+      applied: { code: 'paris_max', label: 'Plafond de l\'encadrement (loyer de référence majoré)', monthly: 1562, perM2: 24.03 },
+      parisControl: { city: 'Paris', year: 2026, zoneId: 3, quartier: 'Chaussée-d\'Antin', rooms: 3, refPerM2: 20.03, maxPerM2: 24.03, minPerM2: 14.02, maxMonthly: 1562 },
+      tenseZone: 'yes'
+    },
+    confidence: 80, uncertaintyBand: 7,
+    source: { kind: 'paris_blend', category: 'appartement_3_plus', label: 'Observatoire des loyers (quartier Chaussée-d\'Antin) et Carte des loyers 2025', referenceDate: '2026-07-01' },
+    yield: { gross: 2.7 }, furnished: false, constructionPeriod: '1946_1970', warning: null
+  },
+  disclaimer: 'Valeurs indicatives, non contractuelles.'
+};
+
 async function mockApi(page, calls) {
   await page.route('**/api/geo/resolve*', r => r.fulfill({ json: { suggestions: [
-    { address: '2 Rue des Italiens 75009 Paris', lat: 48.8718, lng: 2.3372 },
+    { address: '2 Rue des Italiens 75009 Paris', lat: 48.8718, lng: 2.3372, insee: '75109' },
     { address: '2 Rue des Italiens 13001 Marseille', lat: 43.29, lng: 5.38 }
   ] } }));
   await page.route('**/api/verification/send-otp', r => { calls.push('send'); r.fulfill({ json: { success: true } }); });
   await page.route('**/api/verification/verify-otp', r => { calls.push('verify'); r.fulfill({ json: { success: true, verified: true } }); });
   await page.route('**/api/leads', r => { calls.push('lead'); r.fulfill({ json: { success: true, leadId: 'L1' } }); });
   await page.route('**/api/estimate', r => {
-    calls.push(`estimate:${JSON.parse(r.request().postData()).leadId}`);
-    r.fulfill({ json: estimate });
+    const body = JSON.parse(r.request().postData());
+    calls.push(`estimate:${body.leadId}`);
+    if (body.purpose === 'rent') calls.push(`rent:${body.rent.rooms}:${body.rent.furnished}:${body.rent.insee}:${body.rent.rentedRecently}`);
+    r.fulfill({ json: body.purpose === 'rent' ? rentEstimate : estimate });
   });
   // Tuiles de carte et tags externes inutiles au test
   await page.route(/(basemaps\.cartocdn\.com|googletagmanager\.com)/, r => r.abort());
@@ -104,6 +139,55 @@ test('parcours complet : adresse → estimation, un seul lead', async ({ page })
   // Nouvelle estimation : retour à l'accueil, pas de nouveau SMS nécessaire
   await page.getByRole('button', { name: 'Nouvelle estimation' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Combien vaut votre bien');
+});
+
+test('parcours location : questions propres au loyer, résultat plafonné et cadre légal', async ({ page }) => {
+  const calls = [];
+  await mockApi(page, calls);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Tout refuser' }).click();
+
+  await page.fill('#address', '2 rue des ital');
+  await page.getByRole('option').first().click();
+  await page.getByRole('button', { name: /Commencer/ }).click();
+  await page.getByRole('button', { name: 'Appartement' }).click();
+  await page.fill('#surface', '65');
+  await page.fill('#rooms', '3');
+  await page.fill('#floor', '2');
+  await page.fill('#floors', '6');
+  await page.getByRole('button', { name: 'Oui', exact: true }).click();
+  await page.getByRole('button', { name: /Continuer/ }).click();
+  await page.getByRole('button', { name: /Continuer/ }).click();
+  await page.getByRole('button', { name: /Continuer/ }).click();
+
+  await page.fill('#name', 'Marie Bailleur');
+  await page.fill('#email', 'marie@test.fr');
+  await page.fill('#phone', '0612345678');
+  await page.getByRole('button', { name: /Louer/ }).click();
+  // Les questions de location apparaissent ; l'époque est demandée car l'année n'a pas été saisie
+  await expect(page.getByText('Type de location')).toBeVisible();
+  await expect(page.getByText('Époque de construction')).toBeVisible();
+  await page.check('#consent');
+  await expect(page.getByRole('button', { name: /Recevoir mon estimation/ })).toBeDisabled();
+  await page.getByRole('button', { name: 'Vide' }).click();
+  await page.getByRole('button', { name: '1946-1970' }).click();
+  await page.getByRole('button', { name: 'Non', exact: true }).click();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: /Recevoir mon estimation/ }).click();
+  // Attendre l'écran de saisie du code avant de taper (le runner CI est plus lent)
+  await expect(page.getByText('Vérifiez votre téléphone')).toBeVisible();
+  await page.keyboard.type('123456');
+
+  await expect(page.getByText('Loyer estimé', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('1 562 €').first()).toBeVisible();
+  await expect(page.getByText(/plafonné par la loi/)).toBeVisible();
+  await expect(page.getByText('Encadrement des loyers à Paris')).toBeVisible();
+  await expect(page.getByText('Loyer gelé (DPE F ou G)')).toBeVisible();
+  await expect(page.getByText('Rendement locatif brut')).toBeVisible();
+  await expect(page.getByText('Valeur de vente et rendement')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  expect(calls).toEqual(['send', 'verify', 'lead', 'estimate:L1', 'rent:3:false:75109:false']);
 });
 
 test("mode intégré : pas d'en-tête ni de pied de page", async ({ page }) => {
