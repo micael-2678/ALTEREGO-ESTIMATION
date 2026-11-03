@@ -7,6 +7,7 @@ export default function DVFAdminPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [health, setHealth] = useState(null);
+  const [rentState, setRentState] = useState(null);
 
   useEffect(() => {
     fetch('/api/auth/session').then(res => {
@@ -16,8 +17,52 @@ export default function DVFAdminPage() {
       }
       loadStats();
       loadHealth();
+      loadRentState();
     });
   }, []);
+
+  // Pendant un import des loyers, rafraîchit la progression toutes les 4 secondes
+  useEffect(() => {
+    if (!rentState?.isRunning) return;
+    const timer = setTimeout(loadRentState, 4000);
+    return () => clearTimeout(timer);
+  }, [rentState]);
+
+  const loadRentState = async () => {
+    try {
+      const res = await fetch('/api/admin/rent');
+      if (res.ok) {
+        const data = await res.json();
+        setRentState(data);
+        if (!data.isRunning && data.finishedAt) loadHealth();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const startRentImport = async () => {
+    if (!confirm('Importer les références de loyers (Carte des loyers + encadrement Paris) ?\n\nDurée : quelques minutes.')) return;
+    const res = await fetch('/api/admin/rent', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMessage('❌ ' + (data.error || 'Échec du lancement'));
+      return;
+    }
+    setRentState(data);
+  };
+
+  const startIdfImport = async () => {
+    if (!confirm('Importer les ventes DVF de l\'Île-de-France (75, 77, 78, 91, 92, 93, 94, 95) ?\n\nDurée : environ 15 à 30 minutes.')) return;
+    const res = await fetch('/api/admin/dvf/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ departments: ['75', '77', '78', '91', '92', '93', '94', '95'] })
+    });
+    setMessage(res.ok
+      ? '✅ Import Île-de-France démarré. Rafraîchissez dans 15 à 30 minutes pour voir les ventes.'
+      : '❌ Échec du lancement de l\'import Île-de-France');
+  };
 
   const loadStats = async () => {
     try {
@@ -246,6 +291,45 @@ export default function DVFAdminPage() {
               🗑️ Vider la Base
             </button>
           </div>
+        </div>
+
+        {/* Références de loyers */}
+        <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Références de loyers (projet « Louer »)</h2>
+          <p style={{ color: '#4A4740', marginBottom: '1rem' }}>
+            {health?.rent?.message || 'Carte des loyers (data.gouv.fr) et encadrement des loyers à Paris (opendata.paris.fr).'}
+            {' '}À relancer chaque année : décembre et juillet.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={startRentImport}
+              disabled={rentState?.isRunning}
+              style={{ padding: '0.75rem 1.5rem', background: rentState?.isRunning ? '#9ca3af' : '#141413', color: 'white', border: 'none', borderRadius: '999px', fontSize: '1rem', fontWeight: '600', cursor: rentState?.isRunning ? 'not-allowed' : 'pointer' }}
+            >
+              {rentState?.isRunning ? '⏳ Import des loyers en cours…' : '📥 Charger les références de loyers'}
+            </button>
+            <button
+              onClick={startIdfImport}
+              disabled={loading}
+              style={{ padding: '0.75rem 1.5rem', background: 'white', color: '#141413', border: '1.5px solid #141413', borderRadius: '999px', fontSize: '1rem', fontWeight: '600', cursor: 'pointer' }}
+            >
+              📥 Charger les ventes DVF Île-de-France
+            </button>
+          </div>
+          {rentState?.steps?.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>{rentState.message}</p>
+              {rentState.steps.map(step => (
+                <div key={step.label} style={{ display: 'flex', gap: '0.75rem', padding: '0.35rem 0' }}>
+                  <span style={{ color: step.status === 'ok' ? '#16a34a' : step.status === 'error' ? '#B94E33' : '#4A4740', fontWeight: 700 }}>
+                    {step.status === 'ok' ? '✓' : step.status === 'error' ? '✗' : '…'}
+                  </span>
+                  <span style={{ fontWeight: 600, minWidth: '16rem' }}>{step.label}</span>
+                  <span style={{ color: '#4A4740' }}>{step.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Info */}
