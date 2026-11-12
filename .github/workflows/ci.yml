@@ -7,7 +7,9 @@ on:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    # ubuntu-latest est passé à Ubuntu 26.04, que Playwright ne prend pas encore en charge
+    # (« Playwright does not support chromium on ubuntu26.04-x64 ») : version fixée.
+    runs-on: ubuntu-24.04
     services:
       mongo:
         image: mongo:7
