@@ -108,6 +108,12 @@ Les scripts d'import DVF fonctionnent dans le conteneur :
 Voir `.env.example`. Sans `JWT_SECRET`, `ADMIN_USERNAME` et `ADMIN_PASSWORD`,
 l'administration est désactivée.
 
+**SMS de vérification (Brevo)** : un compte Brevo neuf ne peut pas envoyer de SMS tant que
+Brevo n'a pas activé l'envoi (« Your SMS sending status is not yet activated ») ; l'activation
+se demande au support Brevo. `/admin/dvf` (État du service) affiche la dernière erreur d'envoi.
+En attendant, `PHONE_VERIFICATION=off` laisse passer les demandes sans code : les leads sont
+alors marqués « non vérifié » dans l'admin. À retirer dès que les SMS partent.
+
 ## Organisation du code
 
 | Dossier | Contenu |

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { json, preflight, handler, adminHandler, readJson } from '@/lib/api-helpers';
 import { getCollection } from '@/lib/mongodb';
 import { LEGAL, CONSENT_TEXTS } from '@/lib/legal';
+import { shouldBypassVerification, isPhoneVerificationDisabled } from '@/lib/otp-service';
 import {
   ESTIMATION_REASONS,
   ensureIndexes,
@@ -40,7 +41,9 @@ export const POST = handler(async (request) => {
   if (body.consent !== true) {
     return json(request, { error: 'Le consentement est requis.' }, 400);
   }
-  if (!(await isPhoneRecentlyVerified(phone))) {
+  // Vérifié par SMS, sauf numéro dispensé (BYPASS_PHONE_NUMBER) ou vérification désactivée
+  const bypassed = shouldBypassVerification(phone);
+  if (!bypassed && !(await isPhoneRecentlyVerified(phone))) {
     return json(request, { error: 'Numéro de téléphone non vérifié.' }, 403);
   }
 
@@ -60,7 +63,8 @@ export const POST = handler(async (request) => {
       marketing: body.marketingConsent === true ? CONSENT_TEXTS.marketing : null,
       at: new Date().toISOString()
     },
-    phoneVerified: true,
+    phoneVerified: !bypassed,
+    verificationMethod: bypassed ? (isPhoneVerificationDisabled() ? 'disabled' : 'bypass') : 'sms',
     property: sanitizeProperty(body.property),
     status: 'pending_estimation',
     source: typeof body.source === 'string' ? body.source.slice(0, 100) : 'estimation',
