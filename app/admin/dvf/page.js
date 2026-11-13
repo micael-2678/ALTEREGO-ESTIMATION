@@ -215,6 +215,7 @@ export default function DVFAdminPage() {
               ['Base DVF', health.database],
               ['Références de loyers', health.rent],
               ['Envoi des SMS (Brevo)', health.sms],
+              ['Vérification SMS', health.verification],
               ['Numéros sans vérification', health.bypass],
               ['RGPD', health.rgpd]
             ].filter(([, item]) => item).map(([label, item]) => (

@@ -37,7 +37,7 @@ export default function MentionsLegales() {
       <p>
         La marque, le logo et les contenus de ce site sont la propriété de {LEGAL.companyName}. Les polices
         Bricolage Grotesque et Instrument Sans sont distribuées sous licence SIL Open Font License. Les fonds de
-        carte sont fournis par OpenStreetMap (ODbL) et CARTO.
+        carte sont fournis par OpenStreetMap (ODbL).
       </p>
 
       <h2>Données personnelles</h2>

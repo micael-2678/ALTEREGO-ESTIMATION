@@ -493,6 +493,9 @@ export default function AdminPage() {
                     <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
                       {lead.phone}
                     </a>
+                    {lead.phoneVerified === false && (
+                      <span className="text-xs text-amber-700">non vérifié</span>
+                    )}
                   </div>
                 )}
                 {lead.property?.address && (
@@ -626,7 +629,10 @@ export default function AdminPage() {
                     <h3 className="font-semibold mb-3">Informations contact</h3>
                     <div className="space-y-2 text-sm">
                       <div><strong>Email:</strong> <a href={`mailto:${selectedLead.email}`} className="text-blue-600">{selectedLead.email}</a></div>
-                      <div><strong>Téléphone:</strong> <a href={`tel:${selectedLead.phone}`} className="text-blue-600">{selectedLead.phone}</a></div>
+                      <div>
+                        <strong>Téléphone:</strong> <a href={`tel:${selectedLead.phone}`} className="text-blue-600">{selectedLead.phone}</a>
+                        {selectedLead.phoneVerified === false && <span className="ml-2 text-sm text-amber-700">(non vérifié par SMS)</span>}
+                      </div>
                       <div><strong>Date:</strong> {new Date(selectedLead.createdAt).toLocaleString('fr-FR')}</div>
                     </div>
                   </Card>
